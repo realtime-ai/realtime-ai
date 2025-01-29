@@ -10,8 +10,15 @@ import (
 
 // StartServer 启动 WebRTC 服务器
 func StartServer(addr string) error {
-	rtcServer := server.NewWebRTCServer(9000)
-	rtcServer.Start()
+
+	cfg := &server.ServerConfig{
+		RTCUDPPort: 9000,
+	}
+
+	rtcServer := server.NewRTCServer(cfg, nil)
+	if err := rtcServer.Start(); err != nil {
+		log.Fatal(err)
+	}
 
 	http.HandleFunc("/session", rtcServer.HandleNegotiate)
 

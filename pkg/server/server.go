@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"sync"
@@ -15,25 +14,30 @@ import (
 	"github.com/realtime-ai/gemini-realtime-webrtc/pkg/connection"
 )
 
-type WebRTCServer struct {
+type RTCServer struct {
 	sync.RWMutex
-	peers      map[string]*connection.RTCConnectionWrapper
-	rtcUDPPort int
-	api        *webrtc.API
+
+	config  *ServerConfig
+	peers   map[string]connection.RTCConnection
+	api     *webrtc.API
+	handler ConnectionEventHandler
 }
 
-func NewWebRTCServer(rtcUDPPort int) *WebRTCServer {
-
-	return &WebRTCServer{
-		rtcUDPPort: rtcUDPPort,
-		peers:      make(map[string]*connection.RTCConnectionWrapper),
+func NewRTCServer(cfg *ServerConfig, handler ConnectionEventHandler) *RTCServer {
+	if handler == nil {
+		handler = &NoOpConnectionEventHandler{}
+	}
+	return &RTCServer{
+		config:  cfg,
+		handler: handler,
+		peers:   make(map[string]connection.RTCConnection),
 	}
 }
 
-func (s *WebRTCServer) Start() error {
+func (s *RTCServer) Start() error {
 
 	settingEngine := webrtc.SettingEngine{}
-	settingEngine.SetLite(true)
+	// settingEngine.SetLite(true)
 
 	settingEngine.SetNetworkTypes([]webrtc.NetworkType{
 		webrtc.NetworkTypeUDP4,
@@ -42,7 +46,7 @@ func (s *WebRTCServer) Start() error {
 
 	udpListener, err := net.ListenUDP("udp", &net.UDPAddr{
 		IP:   net.ParseIP("0.0.0.0"),
-		Port: s.rtcUDPPort,
+		Port: s.config.RTCUDPPort,
 	})
 
 	if err != nil {
@@ -62,7 +66,7 @@ func (s *WebRTCServer) Start() error {
 }
 
 // HandleNegotiate 处理 /session 路由
-func (s *WebRTCServer) HandleNegotiate(w http.ResponseWriter, r *http.Request) {
+func (s *RTCServer) HandleNegotiate(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
@@ -95,43 +99,73 @@ func (s *WebRTCServer) HandleNegotiate(w http.ResponseWriter, r *http.Request) {
 	pc, err := s.api.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{},
 	})
+
 	if err != nil {
+		s.handler.OnPeerConnectionError(ctx, "", err)
 		http.Error(w, "Failed to create peer connection", http.StatusInternalServerError)
 		return
 	}
 
 	peerID := uuid.New().String()
-	wrapper := connection.NewRTCConnectionWrapper(peerID, pc)
+	rtcConnection := connection.NewRTCConnection(peerID, pc)
+
+	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+		s.handler.OnPeerConnectionStateChange(ctx, rtcConnection, state)
+	})
+
+	// ICE 状态回调
+	pc.OnICEConnectionStateChange(func(iceState webrtc.ICEConnectionState) {
+		s.handler.OnICEConnectionStateChange(ctx, rtcConnection, iceState)
+	})
+
+	// Track 回调
+	pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
+		s.handler.OnTrack(ctx, rtcConnection, track, receiver)
+	})
+
+	// 如果你想在 wrapper 里设置 pc.OnDataChannel，也行；也可以在这里：
+	pc.OnDataChannel(func(dc *webrtc.DataChannel) {
+		// 这里可能需要把 channel 存到 wrapper 里
+		//wrapper.AddDataChannel(dc)
+		s.handler.OnDataChannel(ctx, rtcConnection, dc)
+	})
 
 	// 将 wrapper 加入 server 管理
 	s.Lock()
-	s.peers[peerID] = wrapper
+	s.peers[peerID] = rtcConnection
 	s.Unlock()
 
-	// 在此处启动或初始化 AI Session
-	if err := wrapper.InitAISession(ctx); err != nil {
-		log.Println("Failed to init AI session:", err)
+	// 通知 Handler： PeerConnection 已经创建
+	s.handler.OnPeerConnectionCreated(ctx, rtcConnection)
+
+	if err := rtcConnection.InitAISession(ctx); err != nil {
+		s.handler.OnPeerConnectionError(ctx, peerID, err)
+		http.Error(w, "Failed to init AI session", http.StatusInternalServerError)
+		return
 	}
 
-	err = wrapper.Start(ctx, pc)
+	err = rtcConnection.Start(ctx)
 	if err != nil {
-		log.Println("Failed to start wrapper:", err)
+		s.handler.OnPeerConnectionError(ctx, peerID, err)
+		http.Error(w, "Failed to start rtc connection", http.StatusInternalServerError)
+		return
 	}
 
-	// 将远端 Offer 设置为本地 PeerConnection 的 RemoteDescription
+	// 开始协商
 	if err := pc.SetRemoteDescription(offer); err != nil {
-		fmt.Printf("Failed to set remote description: %v\n", err)
+		s.handler.OnPeerConnectionError(ctx, peerID, err)
 		http.Error(w, "Failed to set remote description", http.StatusInternalServerError)
 		return
 	}
 
-	// 创建应答
 	answer, err := pc.CreateAnswer(nil)
 	if err != nil {
+		s.handler.OnPeerConnectionError(ctx, peerID, err)
 		http.Error(w, "Failed to create answer", http.StatusInternalServerError)
 		return
 	}
 	if err := pc.SetLocalDescription(answer); err != nil {
+		s.handler.OnPeerConnectionError(ctx, peerID, err)
 		http.Error(w, "Failed to set local description", http.StatusInternalServerError)
 		return
 	}
@@ -140,7 +174,11 @@ func (s *WebRTCServer) HandleNegotiate(w http.ResponseWriter, r *http.Request) {
 	gatherComplete := webrtc.GatheringCompletePromise(pc)
 	<-gatherComplete
 
+	// 回调协商完成
+	s.handler.OnPeerConnectionNegotiationComplete(ctx, rtcConnection, pc.LocalDescription())
+
+	// 返回给前端
 	w.Header().Set("Content-Type", "application/sdp")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(pc.LocalDescription())
+	_ = json.NewEncoder(w).Encode(pc.LocalDescription())
 }
