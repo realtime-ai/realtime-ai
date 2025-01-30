@@ -69,15 +69,34 @@ type PipelineMessage struct {
 }
 
 type Pipeline struct {
-	mu       sync.Mutex
-	bus      *EventBus
+	sync.Mutex
+	name     string
+	bus      Bus
 	elements []Element
 }
 
-func NewPipeline(elements []Element) *Pipeline {
+func NewPipeline(name string, bus Bus) *Pipeline {
 	return &Pipeline{
-		elements: elements,
+		name:     name,
+		bus:      bus,
+		elements: []Element{},
 	}
+}
+
+func (p *Pipeline) AddElement(element Element) {
+	p.Lock()
+	defer p.Unlock()
+	element.SetBus(p.bus)
+	p.elements = append(p.elements, element)
+}
+
+func (p *Pipeline) AddElements(elements []Element) {
+	p.Lock()
+	defer p.Unlock()
+	for _, element := range elements {
+		element.SetBus(p.bus)
+	}
+	p.elements = append(p.elements, elements...)
 }
 
 func (p *Pipeline) Link(a, b Element) {
@@ -100,6 +119,8 @@ func (p *Pipeline) Start(ctx context.Context) error {
 }
 
 func (p *Pipeline) Stop() error {
+	p.Lock()
+	defer p.Unlock()
 	// 倒序停止更稳妥，也可以正序
 	for i := len(p.elements) - 1; i >= 0; i-- {
 		if err := p.elements[i].Stop(); err != nil {
