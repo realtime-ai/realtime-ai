@@ -24,15 +24,13 @@ type WebRTCSinkElement struct {
 	playout *audio.PlayoutBuffer
 	dumper  *audio.Dumper
 
-	encoder    *opus.Encoder
-	opusFile   *os.File
-	opusEnable bool
+	encoder *opus.Encoder
 
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
 
-func NewWebRTCSinkElement(bufferSize int, track *webrtc.TrackLocalStaticSample) *WebRTCSinkElement {
+func NewWebRTCSinkElement(track *webrtc.TrackLocalStaticSample) *WebRTCSinkElement {
 	playout, err := audio.NewPlayoutBuffer()
 	if err != nil {
 		log.Fatal("create audio buffer error: ", err)
@@ -52,11 +50,11 @@ func NewWebRTCSinkElement(bufferSize int, track *webrtc.TrackLocalStaticSample) 
 	}
 
 	// // 设置编码参数
-	// encoder.SetBitrate(50000) // 64 kbps
-	// encoder.SetComplexity(10) // 最高质量
+	encoder.SetBitrate(50000) // 64 kbps
+	encoder.SetComplexity(10) // 最高质量
 
 	return &WebRTCSinkElement{
-		BaseElement: pipeline.NewBaseElement(bufferSize),
+		BaseElement: pipeline.NewBaseElement(100),
 		track:       track,
 		playout:     playout,
 		dumper:      dumper,

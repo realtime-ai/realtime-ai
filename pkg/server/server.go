@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"sync"
@@ -138,15 +139,10 @@ func (s *RTCServer) HandleNegotiate(w http.ResponseWriter, r *http.Request) {
 	// 通知 Handler： PeerConnection 已经创建
 	s.handler.OnPeerConnectionCreated(ctx, rtcConnection)
 
-	if err := rtcConnection.InitAISession(ctx); err != nil {
-		s.handler.OnPeerConnectionError(ctx, peerID, err)
-		http.Error(w, "Failed to init AI session", http.StatusInternalServerError)
-		return
-	}
-
 	err = rtcConnection.Start(ctx)
 	if err != nil {
 		s.handler.OnPeerConnectionError(ctx, peerID, err)
+		log.Println("Failed to start rtc connection", err)
 		http.Error(w, "Failed to start rtc connection", http.StatusInternalServerError)
 		return
 	}

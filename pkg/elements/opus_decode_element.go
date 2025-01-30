@@ -25,7 +25,7 @@ type OpusDecodeElement struct {
 	wg     sync.WaitGroup
 }
 
-func NewOpusDecodeElement(bufferSize int, sampleRate int, channels int) *OpusDecodeElement {
+func NewOpusDecodeElement(sampleRate int, channels int) *OpusDecodeElement {
 	decoder, err := opus.NewDecoder(sampleRate, channels)
 	if err != nil {
 		log.Fatalf("failed to create opus decoder: %v", err)
@@ -40,7 +40,7 @@ func NewOpusDecodeElement(bufferSize int, sampleRate int, channels int) *OpusDec
 	}
 
 	return &OpusDecodeElement{
-		BaseElement: pipeline.NewBaseElement(bufferSize),
+		BaseElement: pipeline.NewBaseElement(100),
 		decoder:     decoder,
 		sampleRate:  sampleRate,
 		channels:    channels,

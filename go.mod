@@ -5,8 +5,10 @@ go 1.23.4
 require (
 	cloud.google.com/go v0.116.0 // indirect
 	cloud.google.com/go/compute/metadata v0.5.0 // indirect
+	github.com/WqyJh/go-openai-realtime v0.3.4 // indirect
 	github.com/asticode/go-astiav v0.30.0 // indirect
 	github.com/asticode/go-astikit v0.42.0 // indirect
+	github.com/coder/websocket v1.8.12 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-audio/audio v1.0.0 // indirect
 	github.com/go-audio/riff v1.0.0 // indirect
@@ -41,6 +43,7 @@ require (
 	github.com/pion/webrtc/v3 v3.3.5 // indirect
 	github.com/pion/webrtc/v4 v4.0.7 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/sashabaranov/go-openai v1.36.1 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
 	github.com/youpy/go-riff v0.1.0 // indirect

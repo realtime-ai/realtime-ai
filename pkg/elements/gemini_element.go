@@ -12,6 +12,9 @@ import (
 	"google.golang.org/genai"
 )
 
+// Make sure GeminiElement implements pipeline.Element
+var _ pipeline.Element = (*GeminiElement)(nil)
+
 type GeminiElement struct {
 	*pipeline.BaseElement
 
@@ -43,6 +46,24 @@ func NewGeminiElement() *GeminiElement {
 func (e *GeminiElement) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	e.cancel = cancel
+
+	apiKey := os.Getenv("GOOGLE_API_KEY")
+
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{APIKey: apiKey, Backend: genai.BackendGoogleAI})
+	if err != nil {
+		log.Fatal("create client error: ", err)
+		return err
+	}
+
+	session, err := client.Live.Connect("gemini-2.0-flash-exp", &genai.LiveConnectConfig{
+		ResponseModalities: []string{"AUDIO"},
+	})
+	if err != nil {
+		log.Fatal("connect to model error: ", err)
+		return err
+	}
+
+	e.session = session
 
 	// 启动音频输入处理协程
 	e.wg.Add(1)
@@ -167,8 +188,4 @@ func (e *GeminiElement) In() chan<- pipeline.PipelineMessage {
 
 func (e *GeminiElement) Out() <-chan pipeline.PipelineMessage {
 	return e.BaseElement.OutChan
-}
-
-func (e *GeminiElement) SetSession(session *genai.Session) {
-	e.session = session
 }

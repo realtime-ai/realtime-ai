@@ -14,14 +14,6 @@ import (
 	"google.golang.org/genai"
 )
 
-const (
-	sampleRate    = 48000
-	channels      = 2
-	frameSize     = 960      // 20ms @ 48kHz
-	opusFrameSize = 960      // 20ms @ 48kHz
-	maxDataBytes  = 1000 * 2 // Buffer for Opus encoded data
-)
-
 type RTCConnection interface {
 	// PeerID 返回此连接对应的唯一标识
 	PeerID() string
@@ -37,9 +29,6 @@ type RTCConnection interface {
 
 	// LocalAudioTrack 返回本地音频流
 	LocalAudioTrack() *webrtc.TrackLocalStaticSample
-
-	// InitAISession 初始化
-	InitAISession(ctx context.Context) error
 
 	// Start 开始连接
 	Start(ctx context.Context) error
@@ -63,12 +52,16 @@ type rtcConnectionImpl struct {
 	// 本地音频流
 	localAudioTrack *webrtc.TrackLocalStaticSample
 
-	// for pipeline
-	genaiSession           *genai.Session
+	// for openai
+	openaiElement *elements.OpenAIRealtimeAPIElement
+
+	// for gemini
+	geminiElement *elements.GeminiElement
+
+	// for webrtc
 	webrtcSinkElement      *elements.WebRTCSinkElement
 	opusDecodeElement      *elements.OpusDecodeElement
 	inAudioResampleElement *elements.AudioResampleElement
-	geminiElement          *elements.GeminiElement
 
 	pipeline *pipeline.Pipeline
 }
@@ -132,29 +125,49 @@ func (c *rtcConnectionImpl) Start(ctx context.Context) error {
 		Direction: webrtc.RTPTransceiverDirectionSendrecv,
 	})
 
-	webrtcSinkElement := elements.NewWebRTCSinkElement(100, c.localAudioTrack)
+	webrtcSinkElement := elements.NewWebRTCSinkElement(c.localAudioTrack)
 	geminiElement := elements.NewGeminiElement()
-	geminiElement.SetSession(c.genaiSession)
+	openaiElement := elements.NewOpenAIRealtimeAPIElement()
 
-	opusDecodeElement := elements.NewOpusDecodeElement(100, 48000, 1)
+	opusDecodeElement := elements.NewOpusDecodeElement(48000, 1)
 	inAudioResampleElement := elements.NewAudioResampleElement(48000, 16000, 1, 1)
 
-	elements := []pipeline.Element{
-		opusDecodeElement,
-		inAudioResampleElement,
-		geminiElement,
-		webrtcSinkElement,
+	elements := []pipeline.Element{}
+
+	// 如果使用 OpenAI Realtime API，则需要添加 OpenAI Realtime API Element
+	if os.Getenv("USING_OPENAI_REALTIM_API") == "true" {
+		elements = []pipeline.Element{
+			opusDecodeElement,
+			inAudioResampleElement,
+			openaiElement,
+			webrtcSinkElement,
+		}
+	} else {
+		// 如果使用 Gemini，则需要添加 Gemini Element
+		elements = []pipeline.Element{
+			opusDecodeElement,
+			inAudioResampleElement,
+			geminiElement,
+			webrtcSinkElement,
+		}
 	}
 
 	pipeline := pipeline.NewPipeline(elements)
 	pipeline.Link(opusDecodeElement, inAudioResampleElement)
-	pipeline.Link(inAudioResampleElement, geminiElement)
-	pipeline.Link(geminiElement, webrtcSinkElement)
+
+	if os.Getenv("USING_OPENAI_REALTIM_API") == "true" {
+		pipeline.Link(inAudioResampleElement, openaiElement)
+		pipeline.Link(openaiElement, webrtcSinkElement)
+	} else {
+		pipeline.Link(inAudioResampleElement, geminiElement)
+		pipeline.Link(geminiElement, webrtcSinkElement)
+	}
 
 	c.webrtcSinkElement = webrtcSinkElement
 	c.opusDecodeElement = opusDecodeElement
 	c.inAudioResampleElement = inAudioResampleElement
 	c.geminiElement = geminiElement
+	c.openaiElement = openaiElement
 
 	c.pipeline = pipeline
 
@@ -164,29 +177,6 @@ func (c *rtcConnectionImpl) Start(ctx context.Context) error {
 func (c *rtcConnectionImpl) Close() error {
 
 	return c.pipeline.Stop()
-}
-
-func (c *rtcConnectionImpl) InitAISession(ctx context.Context) error {
-
-	apiKey := os.Getenv("GOOGLE_API_KEY")
-
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{APIKey: apiKey, Backend: genai.BackendGoogleAI})
-	if err != nil {
-		log.Fatal("create client error: ", err)
-		return err
-	}
-
-	session, err := client.Live.Connect("gemini-2.0-flash-exp", &genai.LiveConnectConfig{
-		ResponseModalities: []string{"AUDIO"},
-	})
-	if err != nil {
-		log.Fatal("connect to model error: ", err)
-		return err
-	}
-
-	c.genaiSession = session
-
-	return nil
 }
 
 func (c *rtcConnectionImpl) readRemoteAudio(ctx context.Context) {
@@ -226,14 +216,16 @@ func (c *rtcConnectionImpl) readDataChannel(ctx context.Context) {
 
 	c.dataChannel.OnMessage(func(msg webrtc.DataChannelMessage) {
 
-		message := msg.Data
+		// message := msg.Data
 
-		var sendMessage genai.LiveClientMessage
-		if err := json.Unmarshal(message, &sendMessage); err != nil {
-			log.Println("unmarshal message error ", string(message), err)
-			return
-		}
-		c.genaiSession.Send(&sendMessage)
+		// c.geminiElement.In() <- pipeline.PipelineMessage{
+		// 	Type: pipeline.MsgTypeText,
+		// 	TextData: &pipeline.TextData{
+		// 		Data:      string(message),
+		// 		TextType:  "text",
+		// 		Timestamp: time.Now(),
+		// 	},
+		// }
 	})
 
 	<-ctx.Done()
@@ -330,11 +322,10 @@ func (c *RTCConnectionWrapper) Start(ctx context.Context, pc *webrtc.PeerConnect
 		Direction: webrtc.RTPTransceiverDirectionSendrecv,
 	})
 
-	webrtcSinkElement := elements.NewWebRTCSinkElement(100, c.localAudioTrack)
+	webrtcSinkElement := elements.NewWebRTCSinkElement(c.localAudioTrack)
 	geminiElement := elements.NewGeminiElement()
-	geminiElement.SetSession(c.genaiSession)
 
-	opusDecodeElement := elements.NewOpusDecodeElement(100, 48000, 1)
+	opusDecodeElement := elements.NewOpusDecodeElement(48000, 1)
 	inAudioResampleElement := elements.NewAudioResampleElement(48000, 16000, 1, 1)
 
 	elements := []pipeline.Element{

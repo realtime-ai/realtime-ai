@@ -33,6 +33,12 @@ type VideoData struct {
 	Timestamp      time.Time
 }
 
+type TextData struct {
+	Data      string
+	TextType  string
+	Timestamp time.Time
+}
+
 type PipelineMessageType int
 
 const (
@@ -52,12 +58,19 @@ type PipelineMessage struct {
 	// AudioData 音频数据块
 	AudioData *AudioData
 
+	// VideoData 视频数据块
+	VideoData *VideoData
+
+	// TextData 文本数据块
+	TextData *TextData
+
 	// Metadata 元数据
 	Metadata interface{}
 }
 
 type Pipeline struct {
 	mu       sync.Mutex
+	bus      *EventBus
 	elements []Element
 }
 
