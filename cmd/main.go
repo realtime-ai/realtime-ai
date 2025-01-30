@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/joho/godotenv"
-	"github.com/realtime-ai/gemini-realtime-webrtc/pkg/server"
+	"github.com/realtime-ai/realtime-ai/pkg/server"
 )
 
 // StartServer 启动 WebRTC 服务器

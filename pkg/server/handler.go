@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/pion/webrtc/v4"
-	"github.com/realtime-ai/gemini-realtime-webrtc/pkg/connection"
+	"github.com/realtime-ai/realtime-ai/pkg/connection"
 )
 
 type ConnectionEventHandler interface {

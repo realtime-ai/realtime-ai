@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/pion/webrtc/v4"
-	"github.com/realtime-ai/gemini-realtime-webrtc/pkg/elements"
-	"github.com/realtime-ai/gemini-realtime-webrtc/pkg/pipeline"
+	"github.com/realtime-ai/realtime-ai/pkg/elements"
+	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 	"google.golang.org/genai"
 )
 
@@ -216,8 +216,8 @@ func (c *rtcConnectionImpl) readDataChannel(ctx context.Context) {
 
 	c.dataChannel.OnMessage(func(msg webrtc.DataChannelMessage) {
 
+		// TODO: 暂时不支持文本消息
 		// message := msg.Data
-
 		// c.geminiElement.In() <- pipeline.PipelineMessage{
 		// 	Type: pipeline.MsgTypeText,
 		// 	TextData: &pipeline.TextData{

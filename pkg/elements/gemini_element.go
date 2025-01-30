@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/realtime-ai/gemini-realtime-webrtc/pkg/audio"
-	"github.com/realtime-ai/gemini-realtime-webrtc/pkg/pipeline"
+	"github.com/realtime-ai/realtime-ai/pkg/audio"
+	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 	"google.golang.org/genai"
 )
 

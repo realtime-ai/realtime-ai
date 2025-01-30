@@ -10,9 +10,9 @@ import (
 	"github.com/hraban/opus"
 	"github.com/pion/webrtc/v4"
 	"github.com/pion/webrtc/v4/pkg/media"
-	"github.com/realtime-ai/gemini-realtime-webrtc/pkg/audio"
-	"github.com/realtime-ai/gemini-realtime-webrtc/pkg/pipeline"
-	"github.com/realtime-ai/gemini-realtime-webrtc/pkg/utils"
+	"github.com/realtime-ai/realtime-ai/pkg/audio"
+	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
+	"github.com/realtime-ai/realtime-ai/pkg/utils"
 )
 
 // WebRTCSinkElement 将音频数据写入 WebRTC 轨道, todo 支持视频/文本

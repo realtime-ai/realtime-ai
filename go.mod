@@ -1,4 +1,4 @@
-module github.com/realtime-ai/gemini-realtime-webrtc
+module github.com/realtime-ai/realtime-ai
 
 go 1.23.4
 

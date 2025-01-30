@@ -1,25 +1,42 @@
-# Gemini Realtime WebRTC
+# Realtime AI
+
+A real-time AI development framework leveraging WebRTC for audio and video transmission.
+
+## Project Overview
+
+The project consists of three main components:
+
+- **AI SDK (WebRTC)**: Captures and processes audio and video streams on the client side using the WebRTC protocol, including tasks such as audio/video encoding and preliminary inference.
+
+- **WebRTC Gateway**: Manages signaling, handles NAT/firewall traversal, and forwards media streams. It also supports load balancing with the AI Service.
+
+- **AI Service**: Provides real-time inference and data processing capabilities, including speech recognition, image recognition, real-time subtitle generation, speech synthesis, and interactive real-time large model interactions.
+
+## Key Features
+
+- **User-Friendly**: Designed for ease of use with straightforward integration.
+
+- **WebRTC-Based Transmission**: Utilizes WebRTC for audio and video transmission and employs Data Channels for signaling.
+
+- **Flexible AI Pipeline**: AI services are processed through a pipeline architecture, allowing for customizable and modular assembly.
+
+- **Optimized for Real-Time Scenarios**: Specifically engineered to meet the demands of real-time applications, ensuring low latency and high performance.
 
 
-Gemini Realtime API with WebRTC, Like OpenAI Realtime API with WebRTC.
+##  Plans
 
+```
+- [x] WebRTC Server
+- [x] Support Gemini Multimodal Live API
+- [x] Support OpenAI Realtime API
+- [x] Video support
+- [ ] Support Interruption
+- [ ] Split WebRTC Gateway and AI Service
+- [ ] Better Pipeline Design(like Gstreamer)
+- [ ] Support JSON-RPC 
+- [ ] Support Custom CMD
+```
 
-
-## Features
-
-- Real-time voice communication with Gemini AI
-- High-quality audio processing:
-  - 48kHz sample rate support
-  - Opus codec for efficient audio compression
-  - Automatic audio resampling
-  - Smart audio buffering with 100ms accumulation
-- WebRTC-based communication:
-  - Low-latency audio streaming
-  - Reliable data channel for text messages
-- Debug capabilities:
-  - Configurable audio dumping for all streams
-  - Detailed logging
-  - PCM file format support
 
 ## Prerequisites
 
@@ -27,6 +44,7 @@ Gemini Realtime API with WebRTC, Like OpenAI Realtime API with WebRTC.
 - FFmpeg libraries (for audio processing)
 - Opus codec library
 - Google API Key for Gemini AI
+- OpenAI API Key for OpenAI Realtime API
 
 ## Installation
 
@@ -60,11 +78,7 @@ go mod download
 ```bash
 # Required
 export GOOGLE_API_KEY=your_api_key_here
-
-# Optional (for audio debugging)
-export DUMP_SESSION_AUDIO=true  # Dump AI response audio
-export DUMP_REMOTE_AUDIO=true   # Dump user input audio
-export DUMP_LOCAL_AUDIO=true    # Dump playback audio
+export OPENAI_API_KEY=your_api_key_here
 ```
 
 ## Running the Application
@@ -72,43 +86,24 @@ export DUMP_LOCAL_AUDIO=true    # Dump playback audio
 1. Start the server:
 
 ```bash
-go run main.go
+# use  gemini by default
+go run cmd/main.go
+```
+
+or 
+
+```bash
+# use openai by default
+export USING_OPENAI_REALTIM_API=true
+go run cmd/main.go 
 ```
 
 2. Open the web client:
-   - Navigate to `tests/gemini_realtime_webrtc.html` in your browser
+   - Navigate to `tests/realtime_webrtc.html` in your browser
    - Click "Connect" to establish WebRTC connection
    - Allow microphone access when prompted
 
-## Architecture
-
-- `pkg/gateway`: WebRTC server and connection management
-- `pkg/audio`: Audio processing utilities
-  - Resampling between different sample rates
-  - Audio buffering with smart accumulation
-  - PCM/WAV file handling
-- `pkg/utils`: Common utilities and helper functions
-
-## Development
-
-### Building from source:
-
-```bash
-go build -o server
-```
-
-### Running tests:
-
-```bash
-go test ./...
-```
 
 
-## Contributing
 
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a new Pull Request
 

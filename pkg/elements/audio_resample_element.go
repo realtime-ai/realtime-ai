@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/asticode/go-astiav"
-	"github.com/realtime-ai/gemini-realtime-webrtc/pkg/audio"
-	"github.com/realtime-ai/gemini-realtime-webrtc/pkg/pipeline"
+	"github.com/realtime-ai/realtime-ai/pkg/audio"
+	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 )
 
 type AudioResampleElement struct {

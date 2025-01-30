@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/pion/webrtc/v4"
-	"github.com/realtime-ai/gemini-realtime-webrtc/pkg/pipeline"
+	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 )
 
 const (
