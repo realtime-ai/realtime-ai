@@ -3,11 +3,9 @@ package connection
 import (
 	"context"
 	"log"
-	"os"
 	"time"
 
 	"github.com/pion/webrtc/v4"
-	"github.com/realtime-ai/realtime-ai/pkg/elements"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 )
 
@@ -21,18 +19,17 @@ type RTCConnection interface {
 	// AddDataChannel 记录/管理新的 DataChannel（本地或远端创建）
 	DataChannel() *webrtc.DataChannel
 
-	// RemoteAudioTrack 返回远端音频流
-	RemoteAudioTrack() *webrtc.TrackRemote
-
 	// LocalAudioTrack 返回本地音频流
 	LocalAudioTrack() *webrtc.TrackLocalStaticSample
 
-	// Start 开始连接
-	Start(ctx context.Context) error
+	// RegisterEventHandler 注册事件处理器
+	RegisterEventHandler(handler ConnectionEventHandler)
 
 	// Close 关闭底层的 PeerConnection (并执行相应清理)
 	Close() error
 }
+
+// todo add
 
 type rtcConnectionImpl struct {
 	peerID string
@@ -49,28 +46,26 @@ type rtcConnectionImpl struct {
 	// 本地音频流
 	localAudioTrack *webrtc.TrackLocalStaticSample
 
-	// for openai
-	openaiElement *elements.OpenAIRealtimeAPIElement
-
-	// for gemini
-	geminiElement *elements.GeminiElement
-
-	// for webrtc
-	webrtcSinkElement      *elements.WebRTCSinkElement
-	opusDecodeElement      *elements.OpusDecodeElement
-	inAudioResampleElement *elements.AudioResampleElement
-
-	pipeline *pipeline.Pipeline
+	handler ConnectionEventHandler
 }
 
 var _ RTCConnection = (*rtcConnectionImpl)(nil)
 
 func NewRTCConnection(peerID string, pc *webrtc.PeerConnection) RTCConnection {
 
-	return &rtcConnectionImpl{
-		peerID: peerID,
-		pc:     pc,
+	conn := &rtcConnectionImpl{
+		peerID:  peerID,
+		pc:      pc,
+		handler: &NoOpConnectionEventHandler{},
 	}
+
+	conn.Start(context.Background())
+
+	return conn
+}
+
+func (c *rtcConnectionImpl) RegisterEventHandler(handler ConnectionEventHandler) {
+	c.handler = handler
 }
 
 func (c *rtcConnectionImpl) PeerID() string {
@@ -95,13 +90,39 @@ func (c *rtcConnectionImpl) LocalAudioTrack() *webrtc.TrackLocalStaticSample {
 
 func (c *rtcConnectionImpl) Start(ctx context.Context) error {
 
-	c.pc.OnDataChannel(func(d *webrtc.DataChannel) {
-		log.Printf("DataChannel created: %s", d.Label())
-
-		c.dataChannel = d
-
-		go c.readDataChannel(ctx)
+	c.pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+		log.Printf("OnConnectionStateChange: %v", state)
 	})
+
+	// 如果你想在 wrapper 里设置 pc.OnDataChannel，也行；也可以在这里：
+	c.pc.OnDataChannel(func(dc *webrtc.DataChannel) {
+		// 这里可能需要把 channel 存到 wrapper 里
+		//wrapper.AddDataChannel(dc)
+		log.Printf("OnDataChannel: %v", dc.Label())
+	})
+
+	dc, err := c.pc.CreateDataChannel("realtime-ai", nil)
+	if err != nil {
+		log.Println("create data channel error:", err)
+		return err
+	}
+
+	c.dataChannel = dc
+
+	transceiver, err := c.pc.AddTransceiverFromKind(webrtc.RTPCodecTypeAudio, webrtc.RTPTransceiverInit{
+		Direction: webrtc.RTPTransceiverDirectionSendrecv,
+	})
+
+	c.localAudioTrack = transceiver.Sender().Track().(*webrtc.TrackLocalStaticSample)
+
+	log.Printf("localAudioTrack: %v, remoteAudioTrack: %v\n", c.localAudioTrack, c.remoteAudioTrack)
+
+	if err != nil {
+		log.Println("add transceiver error:", err)
+		return err
+	}
+
+	// 将 wrapper 加入 server 管理
 
 	c.pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		log.Printf("OnTrack: %v, codec: %v", track.ID(), track.Codec().MimeType)
@@ -111,71 +132,11 @@ func (c *rtcConnectionImpl) Start(ctx context.Context) error {
 		}
 	})
 
-	audioTrack, audioTrackErr := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus}, "audio", "pion")
-	if audioTrackErr != nil {
-		log.Println("create local audio track error:", audioTrackErr)
-		return audioTrackErr
-	}
-	c.localAudioTrack = audioTrack
-
-	c.pc.AddTransceiverFromTrack(c.localAudioTrack, webrtc.RTPTransceiverInit{
-		Direction: webrtc.RTPTransceiverDirectionSendrecv,
-	})
-
-	webrtcSinkElement := elements.NewWebRTCSinkElement(c.localAudioTrack)
-	geminiElement := elements.NewGeminiElement()
-	openaiElement := elements.NewOpenAIRealtimeAPIElement()
-
-	opusDecodeElement := elements.NewOpusDecodeElement(48000, 1)
-	inAudioResampleElement := elements.NewAudioResampleElement(48000, 16000, 1, 1)
-
-	var elements []pipeline.Element
-
-	// 如果使用 OpenAI Realtime API，则需要添加 OpenAI Realtime API Element
-	if os.Getenv("USING_OPENAI_REALTIM_API") == "true" {
-		elements = []pipeline.Element{
-			opusDecodeElement,
-			inAudioResampleElement,
-			openaiElement,
-			webrtcSinkElement,
-		}
-	} else {
-		// 如果使用 Gemini，则需要添加 Gemini Element
-		elements = []pipeline.Element{
-			opusDecodeElement,
-			inAudioResampleElement,
-			geminiElement,
-			webrtcSinkElement,
-		}
-	}
-
-	bus := pipeline.NewEventBus()
-	pipeline := pipeline.NewPipeline("rtc_connection", bus)
-	pipeline.AddElements(elements)
-
-	pipeline.Link(opusDecodeElement, inAudioResampleElement)
-	if os.Getenv("USING_OPENAI_REALTIM_API") == "true" {
-		pipeline.Link(inAudioResampleElement, openaiElement)
-		pipeline.Link(openaiElement, webrtcSinkElement)
-	} else {
-		pipeline.Link(inAudioResampleElement, geminiElement)
-		pipeline.Link(geminiElement, webrtcSinkElement)
-	}
-
-	c.webrtcSinkElement = webrtcSinkElement
-	c.opusDecodeElement = opusDecodeElement
-	c.inAudioResampleElement = inAudioResampleElement
-	c.geminiElement = geminiElement
-	c.openaiElement = openaiElement
-
-	c.pipeline = pipeline
-
-	return pipeline.Start(ctx)
+	return nil
 }
 
 func (c *rtcConnectionImpl) Close() error {
-
-	return c.pipeline.Stop()
+	return c.pc.Close()
 }
 
 func (c *rtcConnectionImpl) readRemoteAudio(ctx context.Context) {
@@ -204,30 +165,7 @@ func (c *rtcConnectionImpl) readRemoteAudio(ctx context.Context) {
 				},
 			}
 
-			c.opusDecodeElement.In() <- msg
+			log.Printf("readRemoteAudio: %v", msg)
 		}
 	}
 }
-
-func (c *rtcConnectionImpl) readDataChannel(ctx context.Context) {
-
-	defer c.dataChannel.Close()
-
-	c.dataChannel.OnMessage(func(msg webrtc.DataChannelMessage) {
-
-		// TODO: 暂时不支持文本消息
-		// message := msg.Data
-		// c.geminiElement.In() <- pipeline.PipelineMessage{
-		// 	Type: pipeline.MsgTypeText,
-		// 	TextData: &pipeline.TextData{
-		// 		Data:      string(message),
-		// 		TextType:  "text",
-		// 		Timestamp: time.Now(),
-		// 	},
-		// }
-	})
-
-	<-ctx.Done()
-}
-
-// =====================================================

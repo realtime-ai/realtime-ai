@@ -61,8 +61,8 @@ brew install opus ffmpeg
 2. Clone the repository:
 
 ```bash
-git clone https://github.com/realtime-ai/gemini-realtime-webrtc.git
-cd gemini-realtime-webrtc
+git clone https://github.com/realtime-ai/realtime-ai.git
+cd realtime-ai
 ```
 
 3. Install Go dependencies:
@@ -78,6 +78,7 @@ go mod download
 ```bash
 # Required
 export GOOGLE_API_KEY=your_api_key_here
+
 export OPENAI_API_KEY=your_api_key_here
 ```
 
@@ -94,7 +95,6 @@ or
 
 ```bash
 # use openai by default
-export USING_OPENAI_REALTIM_API=true
 go run cmd/main.go 
 ```
 
