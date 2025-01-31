@@ -5,46 +5,21 @@ import (
 	"log"
 	"time"
 
-	"github.com/asticode/go-astiav"
 	"github.com/hraban/opus"
 	"github.com/pion/webrtc/v4"
-	"github.com/realtime-ai/realtime-ai/pkg/audio"
+	"github.com/pion/webrtc/v4/pkg/media"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
+	"github.com/realtime-ai/realtime-ai/pkg/utils"
 )
 
-type RTCConnection interface {
-	// PeerID 返回此连接对应的唯一标识
-	PeerID() string
-	// PeerConnection 返回底层的 *webrtc.PeerConnection
-	PeerConnection() *webrtc.PeerConnection
+const (
+	DefaultInSampleRate = 48000
+	DefaultInChannels   = 1
+	DefaultInBitRate    = 50000
 
-	// AddDataChannel 记录/管理新的 DataChannel（本地或远端创建）
-	DataChannel() *webrtc.DataChannel
-
-	// LocalAudioTrack 返回本地音频流
-	LocalAudioTrack() *webrtc.TrackLocalStaticSample
-
-	// RegisterEventHandler 注册事件处理器
-	RegisterEventHandler(handler ConnectionEventHandler)
-
-	// Close 关闭底层的 PeerConnection (并执行相应清理)
-	Close() error
-
-	// SetAudioEncodeParam 设置音频编码参数
-	SetAudioEncodeParam(sampleRate int, channels int, bitRate int)
-
-	// SetAudioOutputParam 设置音频输出参数
-	SetAudioOutputParam(sampleRate int, channels int)
-
-	// new API
-	// In 返回此连接的输入 channel
-	In() chan<- *pipeline.PipelineMessage
-
-	// Out 返回此连接的输出 channel
-	Out() <-chan *pipeline.PipelineMessage
-}
-
-// todo add
+	DefaultOutSampleRate = 48000
+	DefaultOutChannels   = 1
+)
 
 type rtcConnectionImpl struct {
 	peerID string
@@ -66,9 +41,6 @@ type rtcConnectionImpl struct {
 	inChan  chan *pipeline.PipelineMessage
 	outChan chan *pipeline.PipelineMessage
 
-	inResample  *audio.Resample
-	outResample *audio.Resample
-
 	audioEncoder *opus.Encoder
 	audioDecoder *opus.Decoder
 
@@ -83,12 +55,42 @@ var _ RTCConnection = (*rtcConnectionImpl)(nil)
 
 func NewRTCConnection(peerID string, pc *webrtc.PeerConnection) RTCConnection {
 
+	audioEncoder, err := opus.NewEncoder(DefaultInSampleRate, DefaultInChannels, opus.AppVoIP)
+	if err != nil {
+		log.Fatalf("failed to create encoder: %v", err)
+	}
+	audioEncoder.SetBitrate(DefaultInBitRate)
+	audioEncoder.SetComplexity(10)
+	audioEncoder.SetDTX(true)
+
+	audioDecoder, err := opus.NewDecoder(48000, DefaultOutChannels)
+	if err != nil {
+		log.Fatalf("failed to create decoder: %v", err)
+	}
+
 	conn := &rtcConnectionImpl{
 		peerID:  peerID,
 		pc:      pc,
 		handler: &NoOpConnectionEventHandler{},
 		inChan:  make(chan *pipeline.PipelineMessage, 50),
 		outChan: make(chan *pipeline.PipelineMessage, 50),
+
+		// 编码
+		inSampleRate: DefaultInSampleRate,
+		inChannels:   DefaultInChannels,
+		inBitRate:    DefaultInBitRate,
+
+		// 回调出来
+		outSampleRate: DefaultOutSampleRate,
+		outChannels:   DefaultOutChannels,
+
+		// // 音频重采样
+		// inResample:  inResample,
+		// outResample: outResample,
+
+		// 音频编码
+		audioEncoder: audioEncoder,
+		audioDecoder: audioDecoder,
 	}
 
 	conn.Start(context.Background())
@@ -130,92 +132,88 @@ func (c *rtcConnectionImpl) Out() <-chan *pipeline.PipelineMessage {
 
 func (c *rtcConnectionImpl) SetAudioEncodeParam(sampleRate int, channels int, bitRate int) {
 
-	// 增加判断，如果参数和之前一样，则不重新创建
-	if c.inSampleRate == sampleRate && c.inChannels == channels && c.inBitRate == bitRate {
-		return
-	}
+	// // 增加判断，如果参数和之前一样，则不重新创建
+	// if c.inSampleRate == sampleRate && c.inChannels == channels && c.inBitRate == bitRate {
+	// 	return
+	// }
 
-	c.inSampleRate = sampleRate
-	c.inChannels = channels
-	c.inBitRate = bitRate
+	// c.inSampleRate = sampleRate
+	// c.inChannels = channels
+	// c.inBitRate = bitRate
 
-	inLayout := astiav.ChannelLayoutMono
-	if channels == 1 {
-		inLayout = astiav.ChannelLayoutMono
-	} else if channels == 2 {
-		inLayout = astiav.ChannelLayoutStereo
-	}
+	// inLayout := astiav.ChannelLayoutMono
+	// if channels == 1 {
+	// 	inLayout = astiav.ChannelLayoutMono
+	// } else if channels == 2 {
+	// 	inLayout = astiav.ChannelLayoutStereo
+	// }
 
-	inResample, err := audio.NewResample(24000, sampleRate, astiav.ChannelLayoutMono, inLayout)
-	if err != nil {
-		log.Fatalf("failed to create resample: %v", err)
-	}
+	// // todo 这里需要根据 sampleRate 和 channels 来创建
+	// inResample, err := audio.NewResample(48000, sampleRate, astiav.ChannelLayoutMono, inLayout)
+	// if err != nil {
+	// 	log.Fatalf("failed to create resample: %v", err)
+	// }
 
-	c.inResample = inResample
+	// c.inResample = inResample
 
-	encoder, err := opus.NewEncoder(sampleRate, channels, opus.AppVoIP)
-	if err != nil {
-		log.Fatalf("failed to create encoder: %v", err)
-	}
-	encoder.SetBitrate(bitRate)
-	encoder.SetComplexity(10)
-	encoder.SetDTX(true)
+	// encoder, err := opus.NewEncoder(sampleRate, channels, opus.AppVoIP)
+	// if err != nil {
+	// 	log.Fatalf("failed to create encoder: %v", err)
+	// }
+	// encoder.SetBitrate(bitRate)
+	// encoder.SetComplexity(10)
+	// encoder.SetDTX(true)
 
-	c.audioEncoder = encoder
+	// c.audioEncoder = encoder
 }
 
 func (c *rtcConnectionImpl) SetAudioOutputParam(sampleRate int, channels int) {
 
 	// 增加判断，如果参数和之前一样，则不重新创建
-	if c.outSampleRate == sampleRate && c.outChannels == channels {
-		return
-	}
+	// if c.outSampleRate == sampleRate && c.outChannels == channels {
+	// 	return
+	// }
 
-	c.outSampleRate = sampleRate
-	c.outChannels = channels
+	// c.outSampleRate = sampleRate
+	// c.outChannels = channels
 
-	outLayout := astiav.ChannelLayoutMono
-	if channels == 1 {
-		outLayout = astiav.ChannelLayoutMono
-	} else if channels == 2 {
-		outLayout = astiav.ChannelLayoutStereo
-	}
+	// outLayout := astiav.ChannelLayoutMono
+	// if channels == 1 {
+	// 	outLayout = astiav.ChannelLayoutMono
+	// } else if channels == 2 {
+	// 	outLayout = astiav.ChannelLayoutStereo
+	// }
 
-	outResample, err := audio.NewResample(48000, sampleRate, outLayout, outLayout)
-	if err != nil {
-		log.Fatalf("failed to create resample: %v", err)
-	}
+	// outResample, err := audio.NewResample(48000, sampleRate, astiav.ChannelLayoutMono, outLayout)
+	// if err != nil {
+	// 	log.Fatalf("failed to create resample: %v", err)
+	// }
 
-	c.outResample = outResample
+	// c.outResample = outResample
 
-	decoder, err := opus.NewDecoder(sampleRate, channels)
-	if err != nil {
-		log.Fatalf("failed to create decoder: %v", err)
-	}
+	// decoder, err := opus.NewDecoder(sampleRate, channels)
+	// if err != nil {
+	// 	log.Fatalf("failed to create decoder: %v", err)
+	// }
 
-	c.audioDecoder = decoder
+	// c.audioDecoder = decoder
 }
 
 func (c *rtcConnectionImpl) Start(ctx context.Context) error {
 
 	c.pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
-		log.Printf("OnConnectionStateChange: %v", state)
+		c.handler.OnConnectionStateChange(state)
 	})
 
 	// 如果你想在 wrapper 里设置 pc.OnDataChannel，也行；也可以在这里：
 	c.pc.OnDataChannel(func(dc *webrtc.DataChannel) {
 		// 这里可能需要把 channel 存到 wrapper 里
 		//wrapper.AddDataChannel(dc)
-		log.Printf("OnDataChannel: %v", dc.Label())
+
+		c.dataChannel = dc
+
+		c.readDataChannel(ctx)
 	})
-
-	dc, err := c.pc.CreateDataChannel("realtime-ai", nil)
-	if err != nil {
-		log.Println("create data channel error:", err)
-		return err
-	}
-
-	c.dataChannel = dc
 
 	transceiver, err := c.pc.AddTransceiverFromKind(webrtc.RTPCodecTypeAudio, webrtc.RTPTransceiverInit{
 		Direction: webrtc.RTPTransceiverDirectionSendrecv,
@@ -223,14 +221,10 @@ func (c *rtcConnectionImpl) Start(ctx context.Context) error {
 
 	c.localAudioTrack = transceiver.Sender().Track().(*webrtc.TrackLocalStaticSample)
 
-	log.Printf("localAudioTrack: %v, remoteAudioTrack: %v\n", c.localAudioTrack, c.remoteAudioTrack)
-
 	if err != nil {
 		log.Println("add transceiver error:", err)
 		return err
 	}
-
-	// 将 wrapper 加入 server 管理
 
 	c.pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		log.Printf("OnTrack: %v, codec: %v", track.ID(), track.Codec().MimeType)
@@ -243,11 +237,60 @@ func (c *rtcConnectionImpl) Start(ctx context.Context) error {
 	return nil
 }
 
+func (c *rtcConnectionImpl) SendMessage(msg *pipeline.PipelineMessage) {
+
+	if msg.Type == pipeline.MsgTypeText {
+
+		if c.dataChannel != nil && c.dataChannel.ReadyState() == webrtc.DataChannelStateOpen {
+			c.dataChannel.Send([]byte(msg.TextData.Data))
+		} else {
+			log.Println("data channel does not open")
+		}
+
+	} else if msg.Type == pipeline.MsgTypeAudio {
+
+		if msg.AudioData.MediaType == "audio/x-raw" {
+			audioData := msg.AudioData.Data
+
+			// if msg.AudioData.SampleRate != c.inSampleRate || msg.AudioData.Channels != c.inChannels {
+			// 	var err error
+			// 	audioData, err = c.inResample.Resample(audioData)
+			// 	if err != nil {
+			// 		log.Println("resample error:", err)
+			// 		return
+			// 	}
+			// }
+
+			opusBuf := make([]byte, 1275)
+
+			pcm := utils.ByteSliceToInt16Slice(audioData)
+			n, err := c.audioEncoder.Encode(pcm, opusBuf)
+			if err != nil {
+				log.Println("encode error:", err)
+				return
+			}
+
+			sample := media.Sample{
+				Data:     opusBuf[:n],
+				Duration: 20 * time.Millisecond,
+			}
+			// 写入音频轨道
+			if err := c.localAudioTrack.WriteSample(sample); err != nil {
+				log.Printf("Failed to write audio sample: %v", err)
+				return
+			}
+		}
+	}
+}
+
 func (c *rtcConnectionImpl) Close() error {
-	return c.pc.Close()
+	c.pc.Close()
+	return nil
 }
 
 func (c *rtcConnectionImpl) readRemoteAudio(ctx context.Context) {
+
+	pcmBuf := make([]int16, 1920) // stereo * 960
 
 	for {
 		select {
@@ -260,20 +303,58 @@ func (c *rtcConnectionImpl) readRemoteAudio(ctx context.Context) {
 				continue
 			}
 
+			// 解码
+			n, err := c.audioDecoder.Decode(rtpPacket.Payload, pcmBuf)
+			if err != nil {
+				log.Println("Opus decode error:", err)
+				continue
+			}
+
+			audioData := utils.Int16SliceToByteSlice(pcmBuf[:n])
+
+			// 重采样
+			// if c.outSampleRate != 48000 || c.outChannels != 1 {
+
+			// 	audioData, err = c.outResample.Resample(audioData)
+			// 	if err != nil {
+			// 		log.Println("resample error:", err)
+			// 		continue
+			// 	}
+			// }
 			// 将拿到的 payload 投递给 pipeline 的“输入 element”
-			msg := pipeline.PipelineMessage{
+			msg := &pipeline.PipelineMessage{
 				Type: pipeline.MsgTypeAudio,
 				AudioData: &pipeline.AudioData{
-					Data:       rtpPacket.Payload,
+					Data:       audioData,
 					SampleRate: 48000,
 					Channels:   1,
-					MediaType:  "audio/x-opus",
-					Codec:      "opus",
+					MediaType:  "audio/x-raw",
 					Timestamp:  time.Now(),
 				},
 			}
 
-			log.Printf("readRemoteAudio: %v", msg)
+			c.handler.OnMessage(msg)
 		}
 	}
+}
+
+func (c *rtcConnectionImpl) readDataChannel(ctx context.Context) {
+
+	c.dataChannel.OnMessage(func(data webrtc.DataChannelMessage) {
+
+		message := data.Data
+
+		msg := &pipeline.PipelineMessage{
+			Type: pipeline.MsgTypeText,
+			TextData: &pipeline.TextData{
+				Data:      string(message),
+				TextType:  "text",
+				Timestamp: time.Now(),
+			},
+		}
+
+		c.handler.OnMessage(msg)
+	})
+
+	<-ctx.Done()
 }

@@ -126,12 +126,3 @@ func (e *AudioResampleElement) Stop() error {
 	}
 	return nil
 }
-
-// 将 []byte 转换为 []int16
-func byteSliceToInt16Slice(data []byte) []int16 {
-	samples := make([]int16, len(data)/2)
-	for i := 0; i < len(data); i += 2 {
-		samples[i/2] = int16(data[i]) | int16(data[i+1])<<8
-	}
-	return samples
-}

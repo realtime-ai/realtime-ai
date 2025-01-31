@@ -181,11 +181,3 @@ func (e *GeminiElement) Stop() error {
 	e.sessionID = ""
 	return nil
 }
-
-// func (e *GeminiElement) In() chan<- *pipeline.PipelineMessage {
-// 	return e.BaseElement.InChan
-// }
-
-// func (e *GeminiElement) Out() <-chan *pipeline.PipelineMessage {
-// 	return e.BaseElement.OutChan
-// }

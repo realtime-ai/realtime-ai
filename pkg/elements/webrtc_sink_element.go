@@ -8,18 +8,13 @@ import (
 	"time"
 
 	"github.com/hraban/opus"
-	"github.com/pion/webrtc/v4"
-	"github.com/pion/webrtc/v4/pkg/media"
 	"github.com/realtime-ai/realtime-ai/pkg/audio"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
-	"github.com/realtime-ai/realtime-ai/pkg/utils"
 )
 
 // WebRTCSinkElement 将音频数据写入 WebRTC 轨道, todo 支持视频/文本
 type WebRTCSinkElement struct {
 	*pipeline.BaseElement
-
-	track *webrtc.TrackLocalStaticSample
 
 	playout *audio.PlayoutBuffer
 	dumper  *audio.Dumper
@@ -30,7 +25,7 @@ type WebRTCSinkElement struct {
 	wg     sync.WaitGroup
 }
 
-func NewWebRTCSinkElement(track *webrtc.TrackLocalStaticSample) *WebRTCSinkElement {
+func NewWebRTCSinkElement() *WebRTCSinkElement {
 	playout, err := audio.NewPlayoutBuffer()
 	if err != nil {
 		log.Fatal("create audio buffer error: ", err)
@@ -55,7 +50,6 @@ func NewWebRTCSinkElement(track *webrtc.TrackLocalStaticSample) *WebRTCSinkEleme
 
 	return &WebRTCSinkElement{
 		BaseElement: pipeline.NewBaseElement(100),
-		track:       track,
 		playout:     playout,
 		dumper:      dumper,
 		encoder:     encoder,
@@ -145,8 +139,6 @@ func (e *WebRTCSinkElement) run(ctx context.Context) {
 
 		lastSendTime := time.Now()
 
-		opusBuf := make([]byte, 1275) // 最大 Opus 帧大小
-
 		for {
 			select {
 			case <-ctx.Done():
@@ -157,25 +149,18 @@ func (e *WebRTCSinkElement) run(ctx context.Context) {
 
 					audioData := e.playout.ReadFrame()
 
-					pcmData := utils.ByteSliceToInt16Slice(audioData)
-
-					n, err := e.encoder.Encode(pcmData, opusBuf)
-					if err != nil {
-						log.Println("Opus encode error:", err)
-						continue
+					msg := &pipeline.PipelineMessage{
+						Type: pipeline.MsgTypeAudio,
+						AudioData: &pipeline.AudioData{
+							Data:       audioData,
+							SampleRate: 48000,
+							Channels:   1,
+							MediaType:  "audio/x-raw",
+							Timestamp:  time.Now(),
+						},
 					}
 
-					// 创建音频样本
-					sample := media.Sample{
-						Data:     opusBuf[:n],
-						Duration: 20 * time.Millisecond,
-					}
-
-					// 写入音频轨道
-					if err := e.track.WriteSample(sample); err != nil {
-						log.Printf("Failed to write audio sample: %v", err)
-						continue
-					}
+					e.BaseElement.OutChan <- msg
 
 					lastSendTime = time.Now()
 				}

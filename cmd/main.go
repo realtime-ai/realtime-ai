@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/pion/webrtc/v4"
@@ -14,25 +13,30 @@ import (
 	"github.com/realtime-ai/realtime-ai/pkg/server"
 )
 
-type GeminiAssistantHandler struct {
-	server.ServerEventHandler
+type connectionEventHandler struct {
+	connection.ConnectionEventHandler
+
+	conn connection.RTCConnection
+
+	pipeline             *pipeline.Pipeline
+	geminiElement        *elements.GeminiElement
+	audioResampleElement *elements.AudioResampleElement
+	webrtcSinkElement    *elements.WebRTCSinkElement
 }
 
-func (g *GeminiAssistantHandler) OnConnectionCreated(ctx context.Context, conn connection.RTCConnection) {
+func (c *connectionEventHandler) OnConnectionStateChange(state webrtc.PeerConnectionState) {
 
-	conn.PeerConnection().OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-		log.Printf("OnTrack: %s, %v \n", conn.PeerID(), track)
+	log.Printf("OnConnectionStateChange: %v \n", state)
 
-		webrtcSinkElement := elements.NewWebRTCSinkElement(conn.LocalAudioTrack())
+	if state == webrtc.PeerConnectionStateConnected {
+
+		webrtcSinkElement := elements.NewWebRTCSinkElement()
 		geminiElement := elements.NewGeminiElement()
-
-		opusDecodeElement := elements.NewOpusDecodeElement(48000, 1)
-		inAudioResampleElement := elements.NewAudioResampleElement(48000, 16000, 1, 1)
+		audioResampleElement := elements.NewAudioResampleElement(48000, 16000, 1, 1)
 
 		// 如果使用 Gemini，则需要添加 Gemini Element
 		elements := []pipeline.Element{
-			opusDecodeElement,
-			inAudioResampleElement,
+			audioResampleElement,
 			geminiElement,
 			webrtcSinkElement,
 		}
@@ -40,51 +44,36 @@ func (g *GeminiAssistantHandler) OnConnectionCreated(ctx context.Context, conn c
 		pipeline := pipeline.NewPipeline("rtc_connection", nil)
 		pipeline.AddElements(elements)
 
-		pipeline.Link(opusDecodeElement, inAudioResampleElement)
-		pipeline.Link(inAudioResampleElement, geminiElement)
+		pipeline.Link(audioResampleElement, geminiElement)
 		pipeline.Link(geminiElement, webrtcSinkElement)
 
-		pipeline.Start(ctx)
+		c.pipeline = pipeline
+		c.geminiElement = geminiElement
+		c.webrtcSinkElement = webrtcSinkElement
+		c.audioResampleElement = audioResampleElement
+		pipeline.Start(context.Background())
 
-		go g.readRemoteTrack(conn, opusDecodeElement, track)
-
-	})
-
-}
-
-func (g *GeminiAssistantHandler) OnPeerConnectionError(ctx context.Context, peerID string, err error) {
-
-	log.Printf("OnPeerConnectionError: %s, %v \n", peerID, err)
-}
-
-func (g *GeminiAssistantHandler) readRemoteTrack(conn connection.RTCConnection, opusDecodeElement *elements.OpusDecodeElement, track *webrtc.TrackRemote) {
-
-	log.Printf("readRemoteTrack: %s, %v \n", conn.PeerID(), track)
-	for {
-
-		rtpPacket, _, err := track.ReadRTP()
-		if err != nil {
-			log.Println("read RTP error:", err)
-			continue
-		}
-
-		// 将拿到的 payload 投递给 pipeline 的“输入 element”
-		msg := &pipeline.PipelineMessage{
-			Type: pipeline.MsgTypeAudio,
-			AudioData: &pipeline.AudioData{
-				Data:       rtpPacket.Payload,
-				SampleRate: 48000,
-				Channels:   1,
-				MediaType:  "audio/x-opus",
-				Codec:      "opus",
-				Timestamp:  time.Now(),
-			},
-		}
-
-		opusDecodeElement.In() <- msg
+		go func() {
+			for msg := range c.webrtcSinkElement.Out() {
+				c.conn.SendMessage(msg)
+			}
+		}()
 
 	}
+}
 
+func (c *connectionEventHandler) OnMessage(msg *pipeline.PipelineMessage) {
+
+	select {
+	case c.audioResampleElement.In() <- msg:
+	default:
+		log.Println("audio resample element in chan is full")
+	}
+}
+
+func (c *connectionEventHandler) OnError(err error) {
+
+	log.Printf("OnError: %v \n", err)
 }
 
 // StartServer 启动 WebRTC 服务器
@@ -94,8 +83,19 @@ func StartServer(addr string) error {
 		RTCUDPPort: 9000,
 	}
 
-	handler := &GeminiAssistantHandler{}
-	rtcServer := server.NewRTCServer(cfg, handler)
+	rtcServer := server.NewRTCServer(cfg)
+
+	rtcServer.OnConnectionCreated(func(ctx context.Context, conn connection.RTCConnection) {
+		conn.RegisterEventHandler(&connectionEventHandler{
+			conn: conn,
+		})
+
+	})
+
+	rtcServer.OnConnectionError(func(ctx context.Context, conn connection.RTCConnection, err error) {
+		log.Printf("OnConnectionError: %s, %v \n", conn.PeerID(), err)
+	})
+
 	if err := rtcServer.Start(); err != nil {
 		log.Fatal(err)
 	}

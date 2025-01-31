@@ -31,8 +31,8 @@ The project consists of three main components:
 - [x] Support OpenAI Realtime API
 - [x] Video support
 - [ ] Support Interruption
-- [ ] Split WebRTC Gateway and AI Service
-- [ ] Better Pipeline Design(like Gstreamer)
+- [x] Split WebRTC Gateway and AI Service
+- [x] Better Pipeline Design(like Gstreamer)
 - [ ] Support JSON-RPC 
 - [ ] Support Custom CMD
 ```

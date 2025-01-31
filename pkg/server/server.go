@@ -21,23 +21,42 @@ type RTCServer struct {
 	peers   map[string]connection.RTCConnection
 	api     *webrtc.API
 	handler ServerEventHandler
+
+	onConnectionCreated func(ctx context.Context, conn connection.RTCConnection)
+	onConnectionError   func(ctx context.Context, conn connection.RTCConnection, err error)
 }
 
-func NewRTCServer(cfg *ServerConfig, handler ServerEventHandler) *RTCServer {
-	if handler == nil {
-		handler = &NoOpServerEventHandler{}
-	}
+func NewRTCServer(cfg *ServerConfig) *RTCServer {
 	return &RTCServer{
-		config:  cfg,
-		handler: handler,
-		peers:   make(map[string]connection.RTCConnection),
+		config:              cfg,
+		onConnectionCreated: func(ctx context.Context, conn connection.RTCConnection) {},
+		onConnectionError:   func(ctx context.Context, conn connection.RTCConnection, err error) {},
+		peers:               make(map[string]connection.RTCConnection),
 	}
+}
+
+func (s *RTCServer) RegisterEventHandler(handler ServerEventHandler) {
+	s.handler = handler
+}
+
+func (s *RTCServer) OnConnectionCreated(f func(ctx context.Context, conn connection.RTCConnection)) {
+	s.onConnectionCreated = f
+}
+
+func (s *RTCServer) OnConnectionError(f func(ctx context.Context, conn connection.RTCConnection, err error)) {
+	s.onConnectionError = f
 }
 
 func (s *RTCServer) Start() error {
 
 	settingEngine := webrtc.SettingEngine{}
-	// settingEngine.SetLite(true)
+	if s.config.ICELite {
+		settingEngine.SetLite(true)
+	}
+
+	if len(s.config.Endpoint) > 0 {
+		settingEngine.SetNAT1To1IPs(s.config.Endpoint, webrtc.ICECandidateTypeHost)
+	}
 
 	settingEngine.SetFireOnTrackBeforeFirstRTP(true)
 
@@ -103,7 +122,7 @@ func (s *RTCServer) HandleNegotiate(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		s.handler.OnConnectionError(ctx, "", err)
+		s.onConnectionError(ctx, nil, err)
 		http.Error(w, "Failed to create peer connection", http.StatusInternalServerError)
 		return
 	}
@@ -116,23 +135,23 @@ func (s *RTCServer) HandleNegotiate(w http.ResponseWriter, r *http.Request) {
 	s.Unlock()
 
 	// 通知 Handler： PeerConnection 已经创建
-	s.handler.OnConnectionCreated(ctx, rtcConnection)
+	s.onConnectionCreated(ctx, rtcConnection)
 
 	// 开始协商
 	if err := pc.SetRemoteDescription(offer); err != nil {
-		s.handler.OnConnectionError(ctx, peerID, err)
+		s.onConnectionError(ctx, rtcConnection, err)
 		http.Error(w, "Failed to set remote description", http.StatusInternalServerError)
 		return
 	}
 
 	answer, err := pc.CreateAnswer(nil)
 	if err != nil {
-		s.handler.OnConnectionError(ctx, peerID, err)
+		s.onConnectionError(ctx, rtcConnection, err)
 		http.Error(w, "Failed to create answer", http.StatusInternalServerError)
 		return
 	}
 	if err := pc.SetLocalDescription(answer); err != nil {
-		s.handler.OnConnectionError(ctx, peerID, err)
+		s.onConnectionError(ctx, rtcConnection, err)
 		http.Error(w, "Failed to set local description", http.StatusInternalServerError)
 		return
 	}

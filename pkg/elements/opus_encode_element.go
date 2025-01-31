@@ -116,11 +116,3 @@ func (e *OpusEncodeElement) Stop() error {
 	e.encoder = nil
 	return nil
 }
-
-// func (e *OpusEncodeElement) In() chan<- *pipeline.PipelineMessage {
-// 	return e.BaseElement.InChan
-// }
-
-// func (e *OpusEncodeElement) Out() <-chan *pipeline.PipelineMessage {
-// 	return e.BaseElement.OutChan
-// }

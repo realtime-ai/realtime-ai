@@ -82,11 +82,3 @@ func (e *WebRTCSourceElement) Stop() error {
 	e.track = nil
 	return nil
 }
-
-// func (e *WebRTCSourceElement) In() chan<- *pipeline.PipelineMessage {
-// 	return e.BaseElement.InChan
-// }
-
-// func (e *WebRTCSourceElement) Out() <-chan *pipeline.PipelineMessage {
-// 	return e.BaseElement.OutChan
-// }
