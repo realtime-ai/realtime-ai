@@ -92,11 +92,11 @@ func (e *WebRTCSinkElement) Stop() error {
 	return nil
 }
 
-func (e *WebRTCSinkElement) In() chan<- pipeline.PipelineMessage {
+func (e *WebRTCSinkElement) In() chan<- *pipeline.PipelineMessage {
 	return e.BaseElement.InChan
 }
 
-func (e *WebRTCSinkElement) Out() <-chan pipeline.PipelineMessage {
+func (e *WebRTCSinkElement) Out() <-chan *pipeline.PipelineMessage {
 	return e.BaseElement.OutChan
 }
 

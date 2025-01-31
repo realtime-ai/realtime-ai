@@ -118,7 +118,7 @@ func (e *OpenAIRealtimeAPIElement) Start(ctx context.Context) error {
 			data := audiobuffer[:]
 			audiobuffer = make([]byte, 0)
 
-			e.BaseElement.OutChan <- pipeline.PipelineMessage{
+			e.BaseElement.OutChan <- &pipeline.PipelineMessage{
 				Type:      pipeline.MsgTypeAudio,
 				SessionID: e.sessionID,
 				Timestamp: time.Now(),

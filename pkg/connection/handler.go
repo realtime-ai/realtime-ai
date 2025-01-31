@@ -8,6 +8,11 @@ type ConnectionEventHandler interface {
 	OnConnectionStateChange(conn RTCConnection, state webrtc.PeerConnectionState)
 	OnDataChannel(conn RTCConnection, dc *webrtc.DataChannel)
 	OnTrack(conn RTCConnection, track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver)
+
+	// 新 API
+	//OnMessage(conn RTCConnection, msg *pipeline.PipelineMessage)
+	// OnError(err error)
+	// OnConnectionState()
 }
 
 // NoOpConnectionEventHandler 一个空实现，方便不想实现所有方法的场景

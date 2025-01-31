@@ -17,8 +17,8 @@ type PropertyDesc struct {
 
 type Element interface {
 	Init(ctx context.Context) error
-	In() chan<- PipelineMessage
-	Out() <-chan PipelineMessage
+	In() chan<- *PipelineMessage
+	Out() <-chan *PipelineMessage
 	Start(ctx context.Context) error
 	Stop() error
 
@@ -32,14 +32,14 @@ type BaseElement struct {
 	properties    map[string]interface{}  // 保存此元素“当前属性值”
 	bus           Bus
 
-	InChan  chan PipelineMessage
-	OutChan chan PipelineMessage
+	InChan  chan *PipelineMessage
+	OutChan chan *PipelineMessage
 }
 
 func NewBaseElement(bufferSize int) *BaseElement {
 	return &BaseElement{
-		InChan:        make(chan PipelineMessage, bufferSize),
-		OutChan:       make(chan PipelineMessage, bufferSize),
+		InChan:        make(chan *PipelineMessage, bufferSize),
+		OutChan:       make(chan *PipelineMessage, bufferSize),
 		propertyDescs: make(map[string]PropertyDesc),
 		properties:    make(map[string]interface{}),
 	}
@@ -49,11 +49,11 @@ func (b *BaseElement) Init(ctx context.Context) error {
 	return nil
 }
 
-func (b *BaseElement) In() chan<- PipelineMessage {
+func (b *BaseElement) In() chan<- *PipelineMessage {
 	return b.InChan
 }
 
-func (b *BaseElement) Out() <-chan PipelineMessage {
+func (b *BaseElement) Out() <-chan *PipelineMessage {
 	return b.OutChan
 }
 

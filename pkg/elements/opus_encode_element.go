@@ -80,7 +80,7 @@ func (e *OpusEncodeElement) Start(ctx context.Context) error {
 				log.Printf("Opus encode success, n: %d", n)
 
 				// 创建输出消息
-				outMsg := pipeline.PipelineMessage{
+				outMsg := &pipeline.PipelineMessage{
 					Type:      pipeline.MsgTypeAudio,
 					SessionID: msg.SessionID,
 					Timestamp: time.Now(),
@@ -117,10 +117,10 @@ func (e *OpusEncodeElement) Stop() error {
 	return nil
 }
 
-func (e *OpusEncodeElement) In() chan<- pipeline.PipelineMessage {
-	return e.BaseElement.InChan
-}
+// func (e *OpusEncodeElement) In() chan<- *pipeline.PipelineMessage {
+// 	return e.BaseElement.InChan
+// }
 
-func (e *OpusEncodeElement) Out() <-chan pipeline.PipelineMessage {
-	return e.BaseElement.OutChan
-}
+// func (e *OpusEncodeElement) Out() <-chan *pipeline.PipelineMessage {
+// 	return e.BaseElement.OutChan
+// }

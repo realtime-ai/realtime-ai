@@ -10,11 +10,6 @@ import (
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 )
 
-const (
-	sampleRate = 48000
-	channels   = 1
-)
-
 type WebRTCSourceElement struct {
 	*pipeline.BaseElement
 
@@ -52,7 +47,7 @@ func (e *WebRTCSourceElement) Start(ctx context.Context) error {
 				}
 
 				// 创建输出消息
-				outMsg := pipeline.PipelineMessage{
+				outMsg := &pipeline.PipelineMessage{
 					Type:      pipeline.MsgTypeAudio,
 					Timestamp: time.Now(),
 					AudioData: &pipeline.AudioData{
@@ -88,10 +83,10 @@ func (e *WebRTCSourceElement) Stop() error {
 	return nil
 }
 
-func (e *WebRTCSourceElement) In() chan<- pipeline.PipelineMessage {
-	return e.BaseElement.InChan
-}
+// func (e *WebRTCSourceElement) In() chan<- *pipeline.PipelineMessage {
+// 	return e.BaseElement.InChan
+// }
 
-func (e *WebRTCSourceElement) Out() <-chan pipeline.PipelineMessage {
-	return e.BaseElement.OutChan
-}
+// func (e *WebRTCSourceElement) Out() <-chan *pipeline.PipelineMessage {
+// 	return e.BaseElement.OutChan
+// }

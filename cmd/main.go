@@ -69,7 +69,7 @@ func (g *GeminiAssistantHandler) readRemoteTrack(conn connection.RTCConnection, 
 		}
 
 		// 将拿到的 payload 投递给 pipeline 的“输入 element”
-		msg := pipeline.PipelineMessage{
+		msg := &pipeline.PipelineMessage{
 			Type: pipeline.MsgTypeAudio,
 			AudioData: &pipeline.AudioData{
 				Data:       rtpPacket.Payload,

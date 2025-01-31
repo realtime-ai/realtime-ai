@@ -88,7 +88,7 @@ func (e *AudioResampleElement) Start(ctx context.Context) error {
 				}
 
 				// 创建输出消息
-				outMsg := pipeline.PipelineMessage{
+				outMsg := &pipeline.PipelineMessage{
 					Type:      pipeline.MsgTypeAudio,
 					SessionID: msg.SessionID,
 					Timestamp: time.Now(),
@@ -125,14 +125,6 @@ func (e *AudioResampleElement) Stop() error {
 		e.resample = nil
 	}
 	return nil
-}
-
-func (e *AudioResampleElement) In() chan<- pipeline.PipelineMessage {
-	return e.BaseElement.InChan
-}
-
-func (e *AudioResampleElement) Out() <-chan pipeline.PipelineMessage {
-	return e.BaseElement.OutChan
 }
 
 // 将 []byte 转换为 []int16

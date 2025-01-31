@@ -91,7 +91,7 @@ func (e *OpusDecodeElement) Start(ctx context.Context) error {
 				}
 
 				// 创建输出消息
-				outMsg := pipeline.PipelineMessage{
+				outMsg := &pipeline.PipelineMessage{
 					Type:      pipeline.MsgTypeAudio,
 					SessionID: msg.SessionID,
 					Timestamp: time.Now(),
@@ -133,10 +133,10 @@ func (e *OpusDecodeElement) Stop() error {
 	return nil
 }
 
-func (e *OpusDecodeElement) In() chan<- pipeline.PipelineMessage {
-	return e.BaseElement.InChan
-}
+// func (e *OpusDecodeElement) In() chan<- *pipeline.PipelineMessage {
+// 	return e.BaseElement.InChan
+// }
 
-func (e *OpusDecodeElement) Out() <-chan pipeline.PipelineMessage {
-	return e.BaseElement.OutChan
-}
+// func (e *OpusDecodeElement) Out() <-chan *pipeline.PipelineMessage {
+// 	return e.BaseElement.OutChan
+// }

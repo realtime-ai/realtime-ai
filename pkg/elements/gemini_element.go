@@ -141,7 +141,7 @@ func (e *GeminiElement) Start(ctx context.Context) error {
 								log.Printf("gemini element receive data len %d\n", len(part.InlineData.Data))
 
 								// todo: 将 AI 返回的 PCM 数据投递给下一环节
-								e.BaseElement.OutChan <- pipeline.PipelineMessage{
+								e.BaseElement.OutChan <- &pipeline.PipelineMessage{
 									Type:      pipeline.MsgTypeAudio,
 									SessionID: e.sessionID,
 									Timestamp: time.Now(),
@@ -182,10 +182,10 @@ func (e *GeminiElement) Stop() error {
 	return nil
 }
 
-func (e *GeminiElement) In() chan<- pipeline.PipelineMessage {
-	return e.BaseElement.InChan
-}
+// func (e *GeminiElement) In() chan<- *pipeline.PipelineMessage {
+// 	return e.BaseElement.InChan
+// }
 
-func (e *GeminiElement) Out() <-chan pipeline.PipelineMessage {
-	return e.BaseElement.OutChan
-}
+// func (e *GeminiElement) Out() <-chan *pipeline.PipelineMessage {
+// 	return e.BaseElement.OutChan
+// }
