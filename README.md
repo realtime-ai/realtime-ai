@@ -2,6 +2,8 @@
 
 A real-time AI development framework leveraging WebRTC for audio and video transmission.
 
+**Note that this project is under active development.**
+
 ## Project Overview
 
 The project consists of three main components:
