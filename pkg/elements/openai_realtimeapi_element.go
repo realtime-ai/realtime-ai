@@ -130,6 +130,18 @@ func (e *OpenAIRealtimeAPIElement) Start(ctx context.Context) error {
 					Timestamp:  time.Now(),
 				},
 			}
+
+		case openairt.ServerEventTypeInputAudioBufferSpeechStarted:
+			// Interrupt the current response
+			msg := event.(openairt.InputAudioBufferSpeechStartedEvent)
+			log.Println("AI session interrupted")
+			e.Bus().Publish(pipeline.Event{
+				Type:      pipeline.EventInterrupted,
+				Timestamp: time.Now(),
+				Payload:   msg,
+			})
+		case openairt.ServerEventTypeInputAudioBufferSpeechStopped:
+			log.Println("Input audio buffer speech stopped")
 		}
 	}
 
@@ -164,28 +176,44 @@ func (e *OpenAIRealtimeAPIElement) Start(ctx context.Context) error {
 			case <-ctx.Done():
 				return
 			case msg := <-e.BaseElement.InChan:
-				if msg.Type != pipeline.MsgTypeAudio {
-					continue
+
+				if msg.Type == pipeline.MsgTypeAudio {
+
+					if msg.AudioData.MediaType != "audio/x-raw" {
+						continue
+					}
+
+					// 将 PCM data 发送给 AI
+					if len(msg.AudioData.Data) == 0 {
+						continue
+					}
+
+					// 保存会话ID
+					e.sessionID = msg.SessionID
+
+					// 将 PCM data 发送给 AI
+					if e.conn != nil {
+						base64Audio := base64.StdEncoding.EncodeToString(msg.AudioData.Data)
+						conn.SendMessage(ctx, openairt.InputAudioBufferAppendEvent{
+							Audio: base64Audio,
+						})
+					}
+				} else if msg.Type == pipeline.MsgTypeData {
+					clientEvent, err := UnmarshalClientEvent(msg.TextData.Data)
+					if err != nil {
+						log.Println("AI session send error:", err)
+						continue
+					}
+
+					if err := e.conn.SendMessage(ctx, clientEvent); err != nil {
+						log.Println("AI session send error:", err)
+						continue
+					}
+				} else {
+					// 投递给下一环节
+					e.BaseElement.OutChan <- msg
 				}
 
-				if msg.AudioData.MediaType != "audio/x-raw" {
-					continue
-				}
-
-				if len(msg.AudioData.Data) == 0 {
-					continue
-				}
-
-				// 保存会话ID
-				e.sessionID = msg.SessionID
-
-				// 将 PCM data 发送给 AI
-				if e.conn != nil {
-					base64Audio := base64.StdEncoding.EncodeToString(msg.AudioData.Data)
-					conn.SendMessage(ctx, openairt.InputAudioBufferAppendEvent{
-						Audio: base64Audio,
-					})
-				}
 			}
 		}
 
@@ -208,4 +236,48 @@ func (e *OpenAIRealtimeAPIElement) Stop() error {
 	}
 
 	return nil
+}
+
+// UnmarshalClientEvent unmarshals the client event from the given JSON data.
+func UnmarshalClientEvent(data []byte) (openairt.ClientEvent, error) {
+	var eventType struct {
+		Type openairt.ClientEventType `json:"type"`
+	}
+	err := json.Unmarshal(data, &eventType)
+	if err != nil {
+		return nil, err
+	}
+
+	switch eventType.Type {
+	case openairt.ClientEventTypeSessionUpdate:
+		return unmarshalClientEvent[openairt.SessionUpdateEvent](data)
+	case openairt.ClientEventTypeInputAudioBufferAppend:
+		return unmarshalClientEvent[openairt.InputAudioBufferAppendEvent](data)
+	case openairt.ClientEventTypeInputAudioBufferCommit:
+		return unmarshalClientEvent[openairt.InputAudioBufferCommitEvent](data)
+	case openairt.ClientEventTypeInputAudioBufferClear:
+		return unmarshalClientEvent[openairt.InputAudioBufferClearEvent](data)
+	case openairt.ClientEventTypeConversationItemCreate:
+		return unmarshalClientEvent[openairt.ConversationItemCreateEvent](data)
+	case openairt.ClientEventTypeConversationItemTruncate:
+		return unmarshalClientEvent[openairt.ConversationItemTruncateEvent](data)
+	case openairt.ClientEventTypeConversationItemDelete:
+		return unmarshalClientEvent[openairt.ConversationItemDeleteEvent](data)
+	case openairt.ClientEventTypeResponseCreate:
+		return unmarshalClientEvent[openairt.ResponseCreateEvent](data)
+	case openairt.ClientEventTypeResponseCancel:
+		return unmarshalClientEvent[openairt.ResponseCancelEvent](data)
+	}
+
+	return nil, fmt.Errorf("unknown client event type: %s", eventType.Type)
+}
+
+// unmarshalClientEvent unmarshals the client event from the given JSON data.
+func unmarshalClientEvent[T openairt.ClientEvent](data []byte) (T, error) {
+	var t T
+	err := json.Unmarshal(data, &t)
+	if err != nil {
+		return t, err
+	}
+	return t, nil
 }

@@ -2,6 +2,7 @@ package elements
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"os"
 	"sync"
@@ -74,43 +75,48 @@ func (e *GeminiElement) Start(ctx context.Context) error {
 			case <-ctx.Done():
 				return
 			case msg := <-e.BaseElement.InChan:
-				if msg.Type != pipeline.MsgTypeAudio {
-					continue
-				}
 
-				if msg.AudioData.MediaType != "audio/x-raw" {
-					continue
-				}
+				if msg.Type == pipeline.MsgTypeAudio {
 
-				if len(msg.AudioData.Data) == 0 {
-					continue
-				}
+					if msg.AudioData.MediaType != "audio/x-raw" || len(msg.AudioData.Data) == 0 {
+						continue
+					}
 
-				// 保存会话ID
-				e.sessionID = msg.SessionID
+					if e.session != nil {
+						// 封装为 LiveClientMessage
+						liveMsg := genai.LiveClientMessage{
+							RealtimeInput: &genai.LiveClientRealtimeInput{
+								MediaChunks: []*genai.Blob{
+									{Data: msg.AudioData.Data, MIMEType: "audio/pcm"},
+								},
+							},
+						}
 
-				// 将 PCM data 发送给 AI
-				if e.session != nil {
-					// 封装为 LiveClientMessage
-
-					// dump 音频数据
-					if e.dumper != nil {
-						if err := e.dumper.Write(msg.AudioData.Data); err != nil {
-							log.Printf("Failed to dump audio: %v", err)
+						if err := e.session.Send(&liveMsg); err != nil {
+							log.Println("AI session send error:", err)
+							continue
 						}
 					}
 
-					liveMsg := genai.LiveClientMessage{
-						RealtimeInput: &genai.LiveClientRealtimeInput{
-							MediaChunks: []*genai.Blob{
-								{Data: msg.AudioData.Data, MIMEType: "audio/pcm"},
-							},
-						},
-					}
-					if err := e.session.Send(&liveMsg); err != nil {
+				} else if msg.Type == pipeline.MsgTypeData {
+
+					liveMsg := genai.LiveClientMessage{}
+					err := json.Unmarshal([]byte(msg.TextData.Data), &liveMsg)
+					if err != nil {
 						log.Println("AI session send error:", err)
 						continue
 					}
+
+					if liveMsg.ClientContent != nil || liveMsg.RealtimeInput != nil {
+
+						if err := e.session.Send(&liveMsg); err != nil {
+							log.Println("AI session send error:", err)
+							continue
+						}
+					}
+				} else {
+					// 投递给下一环节
+					e.BaseElement.OutChan <- msg
 				}
 			}
 		}
@@ -131,15 +137,9 @@ func (e *GeminiElement) Start(ctx context.Context) error {
 					}
 					// 假设返回的 PCM 在 msg.ServerContent.ModelTurn.Parts 里
 					if msg.ServerContent != nil && msg.ServerContent.ModelTurn != nil {
-						log.Printf("gemini element receive %+v\n", msg.ServerContent)
 
 						for _, part := range msg.ServerContent.ModelTurn.Parts {
 							if part.InlineData != nil {
-								// pcmData := part.InlineData.Data
-								// 投递给下一环节
-
-								log.Printf("gemini element receive data len %d\n", len(part.InlineData.Data))
-
 								// todo: 将 AI 返回的 PCM 数据投递给下一环节
 								e.BaseElement.OutChan <- &pipeline.PipelineMessage{
 									Type:      pipeline.MsgTypeAudio,
@@ -155,6 +155,16 @@ func (e *GeminiElement) Start(ctx context.Context) error {
 								}
 							}
 						}
+					}
+
+					// 如果 AI 返回中断事件，则投递到总线
+					if msg.ServerContent != nil && msg.ServerContent.Interrupted {
+						log.Println("AI session interrupted")
+						e.Bus().Publish(pipeline.Event{
+							Type:      pipeline.EventInterrupted,
+							Timestamp: time.Now(),
+							Payload:   msg,
+						})
 					}
 				}
 			}

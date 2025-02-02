@@ -239,10 +239,10 @@ func (c *rtcConnectionImpl) Start(ctx context.Context) error {
 
 func (c *rtcConnectionImpl) SendMessage(msg *pipeline.PipelineMessage) {
 
-	if msg.Type == pipeline.MsgTypeText {
+	if msg.Type == pipeline.MsgTypeData {
 
 		if c.dataChannel != nil && c.dataChannel.ReadyState() == webrtc.DataChannelStateOpen {
-			c.dataChannel.Send([]byte(msg.TextData.Data))
+			c.dataChannel.Send(msg.TextData.Data)
 		} else {
 			log.Println("data channel does not open")
 		}
@@ -345,9 +345,9 @@ func (c *rtcConnectionImpl) readDataChannel(ctx context.Context) {
 		message := data.Data
 
 		msg := &pipeline.PipelineMessage{
-			Type: pipeline.MsgTypeText,
+			Type: pipeline.MsgTypeData,
 			TextData: &pipeline.TextData{
-				Data:      string(message),
+				Data:      message,
 				TextType:  "text",
 				Timestamp: time.Now(),
 			},

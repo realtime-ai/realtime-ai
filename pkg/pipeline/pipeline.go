@@ -2,15 +2,12 @@ package pipeline
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 )
 
 // https://chatgpt.com/c/678d0634-058c-8002-909d-d298453449e9
-
-// type Pipeline struct {
-// 	elements []Element
-// }
 
 type AudioData struct {
 	Data       []byte
@@ -34,7 +31,7 @@ type VideoData struct {
 }
 
 type TextData struct {
-	Data      string
+	Data      []byte
 	TextType  string
 	Timestamp time.Time
 }
@@ -44,7 +41,8 @@ type PipelineMessageType int
 const (
 	MsgTypeAudio PipelineMessageType = iota
 	MsgTypeVideo
-	MsgTypeText
+	MsgTypeData
+	MsgTypeCommand
 )
 
 type PipelineMessage struct {
@@ -68,6 +66,10 @@ type PipelineMessage struct {
 	Metadata interface{}
 }
 
+func (p *PipelineMessage) String() string {
+	return fmt.Sprintf("PipelineMessage{Type: %d, SessionID: %s, Timestamp: %s}", p.Type, p.SessionID, p.Timestamp)
+}
+
 type Pipeline struct {
 	sync.Mutex
 	name     string
@@ -75,7 +77,8 @@ type Pipeline struct {
 	elements []Element
 }
 
-func NewPipeline(name string, bus Bus) *Pipeline {
+func NewPipeline(name string) *Pipeline {
+	bus := NewEventBus()
 	return &Pipeline{
 		name:     name,
 		bus:      bus,
@@ -86,7 +89,7 @@ func NewPipeline(name string, bus Bus) *Pipeline {
 func (p *Pipeline) AddElement(element Element) {
 	p.Lock()
 	defer p.Unlock()
-	element.SetBus(p.bus)
+	element.(*BaseElement).SetBus(p.bus)
 	p.elements = append(p.elements, element)
 }
 
@@ -94,7 +97,7 @@ func (p *Pipeline) AddElements(elements []Element) {
 	p.Lock()
 	defer p.Unlock()
 	for _, element := range elements {
-		element.SetBus(p.bus)
+		element.(*BaseElement).SetBus(p.bus)
 	}
 	p.elements = append(p.elements, elements...)
 }
@@ -109,12 +112,36 @@ func (p *Pipeline) Link(a, b Element) {
 	}()
 }
 
+func (p *Pipeline) Bus() Bus {
+	return p.bus
+}
+
+func (p *Pipeline) Push(msg *PipelineMessage) {
+	if len(p.elements) == 0 {
+		return
+	}
+	select {
+	case p.elements[0].In() <- msg:
+	default:
+		fmt.Println("pipeline input channel is full")
+	}
+}
+
+// Pull 从 pipeline 的最后一个元素获取消息
+func (p *Pipeline) Pull() *PipelineMessage {
+	if len(p.elements) == 0 {
+		return nil
+	}
+	return <-p.elements[len(p.elements)-1].Out()
+}
+
 func (p *Pipeline) Start(ctx context.Context) error {
 	for _, e := range p.elements {
 		if err := e.Start(ctx); err != nil {
 			return err
 		}
 	}
+	p.bus.Start(ctx)
 	return nil
 }
 

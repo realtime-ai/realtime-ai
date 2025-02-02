@@ -65,6 +65,10 @@ func (b *BaseElement) Stop() error {
 	return nil
 }
 
+func (b *BaseElement) Bus() Bus {
+	return b.bus
+}
+
 func (b *BaseElement) SetBus(bus Bus) {
 	b.bus = bus
 }

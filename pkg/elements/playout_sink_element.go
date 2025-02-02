@@ -12,8 +12,8 @@ import (
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 )
 
-// WebRTCSinkElement 将音频数据写入 WebRTC 轨道, todo 支持视频/文本
-type WebRTCSinkElement struct {
+// PlayoutSinkElement 将音频数据写入播放缓冲区
+type PlayoutSinkElement struct {
 	*pipeline.BaseElement
 
 	playout *audio.PlayoutBuffer
@@ -25,7 +25,7 @@ type WebRTCSinkElement struct {
 	wg     sync.WaitGroup
 }
 
-func NewWebRTCSinkElement() *WebRTCSinkElement {
+func NewPlayoutSinkElement() *PlayoutSinkElement {
 	playout, err := audio.NewPlayoutBuffer()
 	if err != nil {
 		log.Fatal("create audio buffer error: ", err)
@@ -48,7 +48,7 @@ func NewWebRTCSinkElement() *WebRTCSinkElement {
 	encoder.SetBitrate(50000) // 64 kbps
 	encoder.SetComplexity(10) // 最高质量
 
-	return &WebRTCSinkElement{
+	return &PlayoutSinkElement{
 		BaseElement: pipeline.NewBaseElement(100),
 		playout:     playout,
 		dumper:      dumper,
@@ -56,17 +56,19 @@ func NewWebRTCSinkElement() *WebRTCSinkElement {
 	}
 }
 
-func (e *WebRTCSinkElement) Start(ctx context.Context) error {
+func (e *PlayoutSinkElement) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	e.cancel = cancel
 
 	e.wg.Add(2) // 两个协程
 	go e.run(ctx)
 
+	go e.listenEvent(ctx)
+
 	return nil
 }
 
-func (e *WebRTCSinkElement) Stop() error {
+func (e *PlayoutSinkElement) Stop() error {
 	if e.cancel != nil {
 		e.cancel()
 		e.wg.Wait()
@@ -86,15 +88,7 @@ func (e *WebRTCSinkElement) Stop() error {
 	return nil
 }
 
-func (e *WebRTCSinkElement) In() chan<- *pipeline.PipelineMessage {
-	return e.BaseElement.InChan
-}
-
-func (e *WebRTCSinkElement) Out() <-chan *pipeline.PipelineMessage {
-	return e.BaseElement.OutChan
-}
-
-func (e *WebRTCSinkElement) run(ctx context.Context) {
+func (e *PlayoutSinkElement) run(ctx context.Context) {
 	// 启动读取输入的协程
 	go func() {
 		defer e.wg.Done()
@@ -167,4 +161,24 @@ func (e *WebRTCSinkElement) run(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+// 监听打断事件
+func (e *PlayoutSinkElement) listenEvent(ctx context.Context) {
+	log.Println("PlayoutSinkElement listenEvent")
+
+	ch := make(chan pipeline.Event, 5)
+
+	e.Bus().Subscribe(pipeline.EventInterrupted, ch)
+
+	defer e.Bus().Unsubscribe(pipeline.EventInterrupted, ch)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event := <-ch:
+			log.Println("PlayoutSinkElement listenEvent", event)
+		}
+	}
 }

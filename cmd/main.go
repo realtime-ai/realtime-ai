@@ -21,7 +21,7 @@ type connectionEventHandler struct {
 	pipeline             *pipeline.Pipeline
 	geminiElement        *elements.GeminiElement
 	audioResampleElement *elements.AudioResampleElement
-	webrtcSinkElement    *elements.WebRTCSinkElement
+	playoutSinkElement   *elements.PlayoutSinkElement
 }
 
 func (c *connectionEventHandler) OnConnectionStateChange(state webrtc.PeerConnectionState) {
@@ -30,7 +30,7 @@ func (c *connectionEventHandler) OnConnectionStateChange(state webrtc.PeerConnec
 
 	if state == webrtc.PeerConnectionStateConnected {
 
-		webrtcSinkElement := elements.NewWebRTCSinkElement()
+		playoutSinkElement := elements.NewPlayoutSinkElement()
 		geminiElement := elements.NewGeminiElement()
 		audioResampleElement := elements.NewAudioResampleElement(48000, 16000, 1, 1)
 
@@ -38,23 +38,23 @@ func (c *connectionEventHandler) OnConnectionStateChange(state webrtc.PeerConnec
 		elements := []pipeline.Element{
 			audioResampleElement,
 			geminiElement,
-			webrtcSinkElement,
+			playoutSinkElement,
 		}
 
-		pipeline := pipeline.NewPipeline("rtc_connection", nil)
+		pipeline := pipeline.NewPipeline("rtc_connection")
 		pipeline.AddElements(elements)
 
 		pipeline.Link(audioResampleElement, geminiElement)
-		pipeline.Link(geminiElement, webrtcSinkElement)
+		pipeline.Link(geminiElement, playoutSinkElement)
 
 		c.pipeline = pipeline
 		c.geminiElement = geminiElement
-		c.webrtcSinkElement = webrtcSinkElement
+		c.playoutSinkElement = playoutSinkElement
 		c.audioResampleElement = audioResampleElement
 		pipeline.Start(context.Background())
 
 		go func() {
-			for msg := range c.webrtcSinkElement.Out() {
+			for msg := range c.playoutSinkElement.Out() {
 				c.conn.SendMessage(msg)
 			}
 		}()

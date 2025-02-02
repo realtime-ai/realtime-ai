@@ -13,10 +13,10 @@ type EventType string
 const (
 	EventError         EventType = "Error"
 	EventWarning       EventType = "Warning"
-	EventStateChange   EventType = "StateChange"
 	EventPartialResult EventType = "PartialResult"
 	EventFinalResult   EventType = "FinalResult"
 	EventBargeIn       EventType = "BargeIn"
+	EventInterrupted   EventType = "Interrupted"
 	// 可继续扩展更多事件类型...
 )
 
