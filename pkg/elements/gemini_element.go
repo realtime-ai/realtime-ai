@@ -44,6 +44,8 @@ func NewGeminiElement() *GeminiElement {
 	}
 }
 
+// Implement Element interface
+
 func (e *GeminiElement) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	e.cancel = cancel
@@ -75,9 +77,7 @@ func (e *GeminiElement) Start(ctx context.Context) error {
 			case <-ctx.Done():
 				return
 			case msg := <-e.BaseElement.InChan:
-
 				if msg.Type == pipeline.MsgTypeAudio {
-
 					if msg.AudioData.MediaType != "audio/x-raw" || len(msg.AudioData.Data) == 0 {
 						continue
 					}
@@ -97,9 +97,7 @@ func (e *GeminiElement) Start(ctx context.Context) error {
 							continue
 						}
 					}
-
 				} else if msg.Type == pipeline.MsgTypeData {
-
 					liveMsg := genai.LiveClientMessage{}
 					err := json.Unmarshal([]byte(msg.TextData.Data), &liveMsg)
 					if err != nil {
@@ -108,7 +106,6 @@ func (e *GeminiElement) Start(ctx context.Context) error {
 					}
 
 					if liveMsg.ClientContent != nil || liveMsg.RealtimeInput != nil {
-
 						if err := e.session.Send(&liveMsg); err != nil {
 							log.Println("AI session send error:", err)
 							continue
@@ -137,7 +134,6 @@ func (e *GeminiElement) Start(ctx context.Context) error {
 					}
 					// 假设返回的 PCM 在 msg.ServerContent.ModelTurn.Parts 里
 					if msg.ServerContent != nil && msg.ServerContent.ModelTurn != nil {
-
 						for _, part := range msg.ServerContent.ModelTurn.Parts {
 							if part.InlineData != nil {
 								// todo: 将 AI 返回的 PCM 数据投递给下一环节
@@ -160,7 +156,7 @@ func (e *GeminiElement) Start(ctx context.Context) error {
 					// 如果 AI 返回中断事件，则投递到总线
 					if msg.ServerContent != nil && msg.ServerContent.Interrupted {
 						log.Println("AI session interrupted")
-						e.Bus().Publish(pipeline.Event{
+						e.BaseElement.Bus().Publish(pipeline.Event{
 							Type:      pipeline.EventInterrupted,
 							Timestamp: time.Now(),
 							Payload:   msg,

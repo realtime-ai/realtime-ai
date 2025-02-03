@@ -1,0 +1,9 @@
+---
+description: element generate rule
+globs: pkg/elements/*.go
+---
+
+# Element rule
+
+- element should use BaseElement as base struct
+- element Start and Stop function should like [gemini_element.go](mdc:pkg/elements/gemini_element.go)

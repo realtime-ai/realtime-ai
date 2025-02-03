@@ -10,6 +10,7 @@ require (
 	github.com/asticode/go-astikit v0.42.0 // indirect
 	github.com/coder/websocket v1.8.12 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/gen2brain/malgo v0.11.23 // indirect
 	github.com/go-audio/audio v1.0.0 // indirect
 	github.com/go-audio/riff v1.0.0 // indirect
 	github.com/go-audio/wav v1.1.0 // indirect

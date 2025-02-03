@@ -165,7 +165,6 @@ func (e *PlayoutSinkElement) run(ctx context.Context) {
 
 // 监听打断事件
 func (e *PlayoutSinkElement) listenEvent(ctx context.Context) {
-	log.Println("PlayoutSinkElement listenEvent")
 
 	ch := make(chan pipeline.Event, 5)
 

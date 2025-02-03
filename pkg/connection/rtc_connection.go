@@ -3,6 +3,7 @@ package connection
 import (
 	"context"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/hraban/opus"
@@ -44,11 +45,14 @@ type rtcConnectionImpl struct {
 	audioEncoder *opus.Encoder
 	audioDecoder *opus.Decoder
 
+	// 音频参数
 	inSampleRate  int
 	inChannels    int
 	inBitRate     int
 	outSampleRate int
 	outChannels   int
+
+	once sync.Once
 }
 
 var _ RTCConnection = (*rtcConnectionImpl)(nil)
@@ -104,22 +108,6 @@ func (c *rtcConnectionImpl) RegisterEventHandler(handler ConnectionEventHandler)
 
 func (c *rtcConnectionImpl) PeerID() string {
 	return c.peerID
-}
-
-func (c *rtcConnectionImpl) PeerConnection() *webrtc.PeerConnection {
-	return c.pc
-}
-
-func (c *rtcConnectionImpl) DataChannel() *webrtc.DataChannel {
-	return c.dataChannel
-}
-
-func (c *rtcConnectionImpl) RemoteAudioTrack() *webrtc.TrackRemote {
-	return c.remoteAudioTrack
-}
-
-func (c *rtcConnectionImpl) LocalAudioTrack() *webrtc.TrackLocalStaticSample {
-	return c.localAudioTrack
 }
 
 func (c *rtcConnectionImpl) In() chan<- *pipeline.PipelineMessage {
@@ -237,6 +225,7 @@ func (c *rtcConnectionImpl) Start(ctx context.Context) error {
 	return nil
 }
 
+// 发送消息,
 func (c *rtcConnectionImpl) SendMessage(msg *pipeline.PipelineMessage) {
 
 	if msg.Type == pipeline.MsgTypeData {
@@ -284,7 +273,11 @@ func (c *rtcConnectionImpl) SendMessage(msg *pipeline.PipelineMessage) {
 }
 
 func (c *rtcConnectionImpl) Close() error {
-	c.pc.Close()
+
+	c.once.Do(func() {
+		c.pc.Close()
+	})
+
 	return nil
 }
 

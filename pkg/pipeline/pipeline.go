@@ -89,7 +89,7 @@ func NewPipeline(name string) *Pipeline {
 func (p *Pipeline) AddElement(element Element) {
 	p.Lock()
 	defer p.Unlock()
-	element.(*BaseElement).SetBus(p.bus)
+	element.SetBus(p.bus)
 	p.elements = append(p.elements, element)
 }
 
@@ -97,7 +97,7 @@ func (p *Pipeline) AddElements(elements []Element) {
 	p.Lock()
 	defer p.Unlock()
 	for _, element := range elements {
-		element.(*BaseElement).SetBus(p.bus)
+		element.SetBus(p.bus)
 	}
 	p.elements = append(p.elements, elements...)
 }

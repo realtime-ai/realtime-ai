@@ -21,15 +21,14 @@ type Element interface {
 	Out() <-chan *PipelineMessage
 	Start(ctx context.Context) error
 	Stop() error
-
 	SetBus(bus Bus)
 	SetProperty(name string, value interface{}) error
 	GetProperty(name string) (interface{}, error)
 }
 
 type BaseElement struct {
-	propertyDescs map[string]PropertyDesc // 保存此元素“可用属性”的描述信息
-	properties    map[string]interface{}  // 保存此元素“当前属性值”
+	propertyDescs map[string]PropertyDesc // 保存此元素"可用属性"的描述信息
+	properties    map[string]interface{}  // 保存此元素"当前属性值"
 	bus           Bus
 
 	InChan  chan *PipelineMessage
