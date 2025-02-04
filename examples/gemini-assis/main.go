@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"log"
 	"net/http"
 
@@ -13,15 +14,15 @@ import (
 	"github.com/realtime-ai/realtime-ai/pkg/server"
 )
 
+//go:embed realtime_webrtc.html
+var indexHTML []byte
+
 type connectionEventHandler struct {
 	connection.ConnectionEventHandler
 
 	conn connection.RTCConnection
 
-	pipeline             *pipeline.Pipeline
-	geminiElement        *elements.GeminiElement
-	audioResampleElement *elements.AudioResampleElement
-	playoutSinkElement   *elements.PlayoutSinkElement
+	pipeline *pipeline.Pipeline
 }
 
 func (c *connectionEventHandler) OnConnectionStateChange(state webrtc.PeerConnectionState) {
@@ -48,15 +49,19 @@ func (c *connectionEventHandler) OnConnectionStateChange(state webrtc.PeerConnec
 		pipeline.Link(geminiElement, playoutSinkElement)
 
 		c.pipeline = pipeline
-		c.geminiElement = geminiElement
-		c.playoutSinkElement = playoutSinkElement
-		c.audioResampleElement = audioResampleElement
+
 		pipeline.Start(context.Background())
 
 		go func() {
-			for msg := range c.playoutSinkElement.Out() {
-				c.conn.SendMessage(msg)
+
+			for {
+				msg := c.pipeline.Pull()
+
+				if msg != nil {
+					c.conn.SendMessage(msg)
+				}
 			}
+
 		}()
 
 	}
@@ -64,11 +69,7 @@ func (c *connectionEventHandler) OnConnectionStateChange(state webrtc.PeerConnec
 
 func (c *connectionEventHandler) OnMessage(msg *pipeline.PipelineMessage) {
 
-	select {
-	case c.audioResampleElement.In() <- msg:
-	default:
-		log.Println("audio resample element in chan is full")
-	}
+	c.pipeline.Push(msg)
 }
 
 func (c *connectionEventHandler) OnError(err error) {
@@ -100,6 +101,11 @@ func StartServer(addr string) error {
 		log.Fatal(err)
 	}
 
+	// Add handler for serving the embedded HTML file
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write(indexHTML)
+	})
 	http.HandleFunc("/session", rtcServer.HandleNegotiate)
 
 	log.Printf("WebRTC server starting on %s", addr)

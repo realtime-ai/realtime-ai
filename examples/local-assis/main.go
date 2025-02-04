@@ -79,7 +79,10 @@ func main() {
 	}
 
 	go func() {
-		for msg := range playoutSinkElement.Out() {
+
+		for {
+			msg := p.Pull()
+
 			// 如果是音频数据且dumper可用，则保存
 			if msg != nil && msg.Type == pipeline.MsgTypeAudio && msg.AudioData != nil && dumper != nil {
 				if err := dumper.Write(msg.AudioData.Data); err != nil {

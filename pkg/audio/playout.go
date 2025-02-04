@@ -78,7 +78,7 @@ func (pb *PlayoutBuffer) ReadFrame() []byte {
 	}
 
 	// 如果有足够数据，关闭积累状态
-	if pb.accumulating && len(pb.buffer) >= BytesPerFrame48kHz*5 {
+	if pb.accumulating && len(pb.buffer) >= BytesPerFrame48kHz*10 {
 		pb.accumulating = false
 		log.Printf("accumulated enough data (%d bytes), starting playback", len(pb.buffer))
 	}

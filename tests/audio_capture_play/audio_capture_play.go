@@ -20,12 +20,10 @@ func main() {
 		ctx.Free()
 	}()
 
-	deviceConfig := malgo.DefaultDeviceConfig(malgo.Duplex)
+	deviceConfig := malgo.DefaultDeviceConfig(malgo.Capture)
 	deviceConfig.Capture.Format = malgo.FormatS16
 	deviceConfig.Capture.Channels = 1
-	deviceConfig.Playback.Format = malgo.FormatS16
-	deviceConfig.Playback.Channels = 1
-	deviceConfig.SampleRate = 44100
+	deviceConfig.SampleRate = 48000
 	deviceConfig.Alsa.NoMMap = 1
 
 	var playbackSampleCount uint32
@@ -65,6 +63,13 @@ func main() {
 	fmt.Scanln()
 
 	device.Uninit()
+
+	deviceConfig = malgo.DefaultDeviceConfig(malgo.Playback)
+	deviceConfig.SampleRate = 48000
+	deviceConfig.Alsa.NoMMap = 1
+	deviceConfig.PeriodSizeInMilliseconds = 20
+	deviceConfig.Playback.Format = malgo.FormatS16
+	deviceConfig.Playback.Channels = 1
 
 	onSendFrames := func(pSample, nil []byte, framecount uint32) {
 		samplesToRead := framecount * deviceConfig.Playback.Channels * sizeInBytes

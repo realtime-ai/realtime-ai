@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"sync"
 	"time"
 
 	"github.com/gen2brain/malgo"
+	"github.com/realtime-ai/realtime-ai/pkg/audio"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 )
 
@@ -25,7 +28,7 @@ type localConnectionImpl struct {
 	peerID string
 
 	// malgo context and devices
-	context        *malgo.AllocatedContext
+	audioContext   *malgo.AllocatedContext
 	captureDevice  *malgo.Device
 	playbackDevice *malgo.Device
 
@@ -37,6 +40,11 @@ type localConnectionImpl struct {
 	// Control channels
 	stopCapture  chan struct{}
 	stopPlayback chan struct{}
+
+	playAudioBuffer []byte
+
+	// Audio dumper
+	playbackDumper *audio.Dumper
 }
 
 func NewLocalConnection(peerID string) (RTCConnection, error) {
@@ -47,12 +55,21 @@ func NewLocalConnection(peerID string) (RTCConnection, error) {
 
 	conn := &localConnectionImpl{
 		peerID:       peerID,
-		context:      ctx,
+		audioContext: ctx,
 		handler:      &NoOpConnectionEventHandler{},
 		inChan:       make(chan *pipeline.PipelineMessage, 50),
 		outChan:      make(chan *pipeline.PipelineMessage, 50),
 		stopCapture:  make(chan struct{}),
 		stopPlayback: make(chan struct{}),
+	}
+
+	// 创建播放数据的dumper
+	if os.Getenv("DUMP_LOCAL_PLAYBACK") == "true" {
+		var err error
+		conn.playbackDumper, err = audio.NewDumper("local_playback", PlaybackDeviceSampleRate, PlaybackDeviceChannels)
+		if err != nil {
+			log.Printf("create playback dumper error: %v", err)
+		}
 	}
 
 	err = conn.Start(context.Background())
@@ -100,7 +117,7 @@ func (l *localConnectionImpl) startAudioCapture() error {
 	deviceConfig.Alsa.NoMMap = 1
 
 	var err error
-	l.captureDevice, err = malgo.InitDevice(l.context.Context, deviceConfig, malgo.DeviceCallbacks{
+	l.captureDevice, err = malgo.InitDevice(l.audioContext.Context, deviceConfig, malgo.DeviceCallbacks{
 		Data: func(outputSamples, inputSamples []byte, framecount uint32) {
 
 			// copy inputSamples 到 tempSamples
@@ -135,6 +152,7 @@ func (l *localConnectionImpl) startAudioCapture() error {
 }
 
 func (l *localConnectionImpl) startAudioPlayback() error {
+
 	deviceConfig := malgo.DefaultDeviceConfig(malgo.Playback)
 	deviceConfig.PeriodSizeInMilliseconds = 20 // 20ms
 	deviceConfig.Playback.Format = malgo.FormatS16
@@ -147,13 +165,15 @@ func (l *localConnectionImpl) startAudioPlayback() error {
 	samplesFor100ms := PlaybackDeviceSampleRate * 100 / 1000 // 采样率 * 0.1秒
 	bufferSize := samplesFor100ms * bytesPerSample * PlaybackDeviceChannels
 
-	var sampleBuffer []byte
-	var audioBuffer []byte // 用于缓存音频数据
-	var isBuffering = true // 是否正在缓冲
+	l.playAudioBuffer = make([]byte, 0)
+	var audioBuffer []byte     // 用于缓存音频数据
+	var isBuffering = true     // 是否正在缓冲
+	var bufferMutex sync.Mutex // 保护 buffer 的互斥锁
 
 	var err error
-	l.playbackDevice, err = malgo.InitDevice(l.context.Context, deviceConfig, malgo.DeviceCallbacks{
+	l.playbackDevice, err = malgo.InitDevice(l.audioContext.Context, deviceConfig, malgo.DeviceCallbacks{
 		Data: func(outputSamples, inputSamples []byte, framecount uint32) {
+			// 检查缓冲状态要在锁外面
 			if isBuffering {
 				// 如果还在缓冲，输出静音
 				for i := range outputSamples {
@@ -162,25 +182,37 @@ func (l *localConnectionImpl) startAudioPlayback() error {
 				return
 			}
 
-			if len(sampleBuffer) > 0 {
-				copyLen := len(outputSamples)
-				if len(sampleBuffer) < copyLen {
-					copyLen = len(sampleBuffer)
-				}
-				copy(outputSamples[:copyLen], sampleBuffer[:copyLen])
-				// Keep remaining data in buffer
-				sampleBuffer = sampleBuffer[copyLen:]
+			bufferMutex.Lock()
+			if len(l.playAudioBuffer) >= len(outputSamples) {
+				// 复制数据到输出缓冲区
+				copy(outputSamples, l.playAudioBuffer[:len(outputSamples)])
+				// 移除已经播放的数据
+				l.playAudioBuffer = l.playAudioBuffer[len(outputSamples):]
 
-				// Fill remaining output with silence if needed
-				for i := copyLen; i < len(outputSamples); i++ {
+				//log.Printf("1111111sampleBuffer remaining: %v, outputSamples: %v", len(l.playAudioBuffer), len(outputSamples))
+			} else if len(l.playAudioBuffer) > 0 {
+				// 如果还有剩余数据但不足一帧,复制剩余数据
+				copy(outputSamples, l.playAudioBuffer)
+				// 将未使用的输出缓冲区填充0
+				for i := len(l.playAudioBuffer); i < len(outputSamples); i++ {
 					outputSamples[i] = 0
-
-					log.Printf("outputSamples: %d, framecount: %d  time: %d\n", len(outputSamples), framecount, int64(time.Now().UnixNano()/1000))
 				}
+
+				//log.Printf("2222222sampleBuffer remaining: %v, outputSamples: %v", len(l.playAudioBuffer), len(outputSamples))
 			} else {
-				// Fill with silence if no data
+				// 如果没有数据,输出静音
 				for i := range outputSamples {
 					outputSamples[i] = 0
+				}
+
+				//log.Printf("3333333sampleBuffer remaining: %v, outputSamples: %v", len(l.playAudioBuffer), len(outputSamples))
+			}
+			bufferMutex.Unlock()
+
+			if l.playbackDumper != nil {
+				if err := l.playbackDumper.Write(outputSamples); err != nil {
+					// 避免在回调中打印日志，可以考虑使用channel发送错误
+					log.Printf("dump playback data error: %v", err)
 				}
 			}
 		},
@@ -211,13 +243,17 @@ func (l *localConnectionImpl) startAudioPlayback() error {
 						// 检查是否已经累积了足够的数据
 						if len(audioBuffer) >= bufferSize {
 							log.Printf("Audio buffer full (%d bytes), starting playback", len(audioBuffer))
-							sampleBuffer = audioBuffer
+							bufferMutex.Lock()
+							l.playAudioBuffer = append(l.playAudioBuffer, audioBuffer...)
+							bufferMutex.Unlock()
 							audioBuffer = nil
 							isBuffering = false
 						}
 					} else {
 						// 正常播放模式，直接追加到播放缓冲区
-						sampleBuffer = append(sampleBuffer, msg.AudioData.Data...)
+						bufferMutex.Lock()
+						l.playAudioBuffer = append(l.playAudioBuffer, msg.AudioData.Data...)
+						bufferMutex.Unlock()
 					}
 				}
 			case <-l.stopPlayback:
@@ -250,9 +286,15 @@ func (l *localConnectionImpl) Close() error {
 		l.playbackDevice.Uninit()
 	}
 
+	// Close dumper
+	if l.playbackDumper != nil {
+		l.playbackDumper.Close()
+		l.playbackDumper = nil
+	}
+
 	// Uninit context
-	if l.context != nil {
-		l.context.Uninit()
+	if l.audioContext != nil {
+		l.audioContext.Uninit()
 	}
 
 	close(l.inChan)

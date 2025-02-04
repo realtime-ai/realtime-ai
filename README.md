@@ -32,9 +32,10 @@ The project consists of three main components:
 - [x] Support Gemini Multimodal Live API
 - [x] Support OpenAI Realtime API
 - [x] Video support
-- [ ] Support Interruption
+- [x] Support Interruption
 - [x] Split WebRTC Gateway and AI Service
 - [x] Better Pipeline Design(like Gstreamer)
+- [ ] Support ASR/LLM/TTS Pipeline
 - [ ] Support JSON-RPC 
 - [ ] Support Custom CMD
 ```
@@ -86,24 +87,18 @@ export OPENAI_API_KEY=your_api_key_here
 
 ## Running the Application
 
-1. Start the server:
+
+1、Start the server:
 
 ```bash
 # use  gemini by default
-go run cmd/main.go
+go run examples/gemini-assis/main.go
 ```
 
-or 
+2、 Open the WebRTC Client:
 
-```bash
-# use openai by default
-go run cmd/main.go 
-```
+Chrome Browser Open `http://localhost:8080`
 
-2. Open the web client:
-   - Navigate to `tests/realtime_webrtc.html` in your browser
-   - Click "Connect" to establish WebRTC connection
-   - Allow microphone access when prompted
 
 
 

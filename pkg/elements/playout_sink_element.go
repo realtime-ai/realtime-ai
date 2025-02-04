@@ -128,7 +128,7 @@ func (e *PlayoutSinkElement) run(ctx context.Context) {
 	go func() {
 		defer e.wg.Done()
 
-		ticker := time.NewTicker(10 * time.Millisecond)
+		ticker := time.NewTicker(5 * time.Millisecond)
 		defer ticker.Stop()
 
 		lastSendTime := time.Now()
@@ -140,6 +140,8 @@ func (e *PlayoutSinkElement) run(ctx context.Context) {
 			case <-ticker.C:
 				// 从播放缓冲区读取一帧数据
 				if time.Since(lastSendTime) >= 20*time.Millisecond {
+
+					lastSendTime = lastSendTime.Add(20 * time.Millisecond)
 
 					audioData := e.playout.ReadFrame()
 
@@ -154,9 +156,12 @@ func (e *PlayoutSinkElement) run(ctx context.Context) {
 						},
 					}
 
-					e.BaseElement.OutChan <- msg
+					select {
+					case e.BaseElement.OutChan <- msg:
+					default:
+						log.Println("playout sink element out chan is full")
+					}
 
-					lastSendTime = time.Now()
 				}
 			}
 		}
