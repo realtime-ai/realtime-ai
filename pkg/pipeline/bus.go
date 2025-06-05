@@ -17,6 +17,8 @@ const (
 	EventFinalResult   EventType = "FinalResult"
 	EventBargeIn       EventType = "BargeIn"
 	EventInterrupted   EventType = "Interrupted"
+	EventStarted       EventType = "Started"
+	EventStopped       EventType = "Stopped"
 	// 可继续扩展更多事件类型...
 )
 
