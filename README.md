@@ -8,7 +8,7 @@ A real-time Agent framework for audio and video.
 
 The project consists of three main components:
 
-- **AI SDK **: Captures and processes audio and video streams on the client side using the WebRTC protocol, including tasks such as audio/video encoding and preliminary inference.
+- **AI SDK**: Captures and processes audio and video streams on the client side using the WebRTC protocol, including tasks such as audio/video encoding and preliminary inference.
 
 - **WebRTC Gateway**: Manages signaling, handles NAT/firewall traversal, and forwards media streams. It also supports load balancing with the AI Service.
 
