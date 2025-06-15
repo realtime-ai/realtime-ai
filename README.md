@@ -1,6 +1,6 @@
 # Realtime AI
 
-A real-time AI development framework leveraging WebRTC for audio and video transmission.
+A real-time Agent framework for audio and video.
 
 **Note that this project is under active development.**
 
