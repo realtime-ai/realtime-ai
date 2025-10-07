@@ -1,3 +1,6 @@
+//go:build azure
+// +build azure
+
 package elements
 
 import (

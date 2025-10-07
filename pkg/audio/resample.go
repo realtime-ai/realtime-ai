@@ -18,6 +18,14 @@ type Resample struct {
 
 // NewResample 创建新的重采样器
 func NewResample(inRate, outRate int, inLayout, outLayout astiav.ChannelLayout) (*Resample, error) {
+	// 验证参数
+	if inRate <= 0 {
+		return nil, fmt.Errorf("invalid input sample rate: %d", inRate)
+	}
+	if outRate <= 0 {
+		return nil, fmt.Errorf("invalid output sample rate: %d", outRate)
+	}
+
 	r := &Resample{
 		inRate:    inRate,
 		outRate:   outRate,
@@ -68,10 +76,10 @@ func (r *Resample) Free() {
 func (r *Resample) Resample(inputData []byte) ([]byte, error) {
 	const align = 0
 
-	// 设置输入帧参数
-	r.inFrame.SetChannelLayout(r.inLayout)
-	r.inFrame.SetSampleFormat(astiav.SampleFormatS16)
-	r.inFrame.SetSampleRate(r.inRate)
+	// 检查输入数据
+	if len(inputData) == 0 {
+		return nil, fmt.Errorf("empty input data")
+	}
 
 	// 计算每个采样的字节数
 	bytesPerSample := 2 // S16 格式为 2 字节
@@ -87,6 +95,18 @@ func (r *Resample) Resample(inputData []byte) ([]byte, error) {
 
 	// 计算采样点数
 	numSamples := len(inputData) / bytesPerFrame
+	if numSamples == 0 {
+		return nil, fmt.Errorf("input data too small")
+	}
+
+	// 释放之前的帧缓冲区
+	r.inFrame.Unref()
+	r.outFrame.Unref()
+
+	// 设置输入帧参数
+	r.inFrame.SetChannelLayout(r.inLayout)
+	r.inFrame.SetSampleFormat(astiav.SampleFormatS16)
+	r.inFrame.SetSampleRate(r.inRate)
 	r.inFrame.SetNbSamples(numSamples)
 
 	// 设置输出帧参数
@@ -96,26 +116,41 @@ func (r *Resample) Resample(inputData []byte) ([]byte, error) {
 
 	// 计算输出采样点数，考虑采样率转换
 	outNumSamples := (numSamples * r.outRate) / r.inRate
+	if outNumSamples == 0 {
+		outNumSamples = 1
+	}
 	r.outFrame.SetNbSamples(outNumSamples)
 
-	// 分配帧缓冲区
+	// 分配输入帧缓冲区
 	if err := r.inFrame.AllocBuffer(align); err != nil {
 		return nil, fmt.Errorf("failed to allocate input buffer: %w", err)
 	}
+
+	// 分配输出帧缓冲区
 	if err := r.outFrame.AllocBuffer(align); err != nil {
 		return nil, fmt.Errorf("failed to allocate output buffer: %w", err)
 	}
 
-	// 复制输入数据到输入帧
-	if err := r.inFrame.AllocSamples(align); err != nil {
-		return nil, fmt.Errorf("failed to allocate samples: %w", err)
-	}
-
+	// 确保输入帧可写
 	if err := r.inFrame.MakeWritable(); err != nil {
 		return nil, fmt.Errorf("making frame writable failed: %w", err)
 	}
 
-	if err := r.inFrame.Data().SetBytes(inputData, align); err != nil {
+	// FFmpeg 可能需要更大的对齐缓冲区，获取实际缓冲区大小
+	actualBufferSize, err := r.inFrame.SamplesBufferSize(align)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get buffer size: %w", err)
+	}
+
+	// 如果输入数据小于实际缓冲区大小，需要填充零
+	inputBuffer := inputData
+	if len(inputData) < actualBufferSize {
+		inputBuffer = make([]byte, actualBufferSize)
+		copy(inputBuffer, inputData)
+	}
+
+	// 设置输入数据
+	if err := r.inFrame.Data().SetBytes(inputBuffer[:actualBufferSize], align); err != nil {
 		return nil, fmt.Errorf("setting frame's data failed: %w", err)
 	}
 
