@@ -45,7 +45,7 @@ type AzureSTTElement struct {
 
 func NewAzureSTTElement() *AzureSTTElement {
 	return &AzureSTTElement{
-		BaseElement:     pipeline.NewBaseElement(100),
+		BaseElement:     pipeline.NewBaseElement("azure-stt-element", 100),
 		subscriptionKey: os.Getenv("AZURE_SPEECH_KEY"),
 		region:          os.Getenv("AZURE_SPEECH_REGION"),
 		language:        "zh-CN", // 默认使用中文，可以通过 SetProperty 修改

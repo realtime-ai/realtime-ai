@@ -37,8 +37,8 @@ type Bus interface {
 	// Unsubscribe 取消订阅
 	Unsubscribe(eventType EventType, ch chan<- Event)
 
-	// Publish 发布一条事件到总线
-	Publish(evt Event)
+	// Publish 发布一条事件到总线，返回是否成功投递（false 表示被丢弃）
+	Publish(evt Event) bool
 
 	// Start 启动总线内部处理（如果需要异步工作）
 	Start(ctx context.Context) error
@@ -94,10 +94,18 @@ func (b *EventBus) Unsubscribe(eventType EventType, ch chan<- Event) {
 }
 
 // Publish 直接发布事件。如果需要异步处理，可以向 b.eventChan 写入
-func (b *EventBus) Publish(evt Event) {
+// 返回 true 表示事件成功投递，false 表示至少一个订阅者丢弃了事件
+func (b *EventBus) Publish(evt Event) bool {
+	allDelivered := true
 	if b.running {
 		// 若有后台协程在处理，就写入 eventChan
-		b.eventChan <- evt
+		select {
+		case b.eventChan <- evt:
+			// 成功写入事件通道
+		default:
+			fmt.Println("[EventBus] Warning: dropping event due to full event channel.")
+			allDelivered = false
+		}
 	} else {
 		// 若不使用后台协程，则直接分发
 		b.lock.RLock()
@@ -110,9 +118,11 @@ func (b *EventBus) Publish(evt Event) {
 			default:
 				// 可做警告处理：订阅者通道堵塞导致事件丢失
 				fmt.Println("[EventBus] Warning: dropping event due to full channel.")
+				allDelivered = false
 			}
 		}
 	}
+	return allDelivered
 }
 
 // Start 启动后台协程，异步分发事件

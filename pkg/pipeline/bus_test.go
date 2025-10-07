@@ -133,9 +133,12 @@ func TestEventBusChannelBlocking(t *testing.T) {
 		Timestamp: time.Now(),
 		Payload:   "first event",
 	}
-	bus.Publish(evt1)
+	delivered := bus.Publish(evt1)
+	if !delivered {
+		t.Error("First event should be delivered successfully")
+	}
 
-	// Try to publish another event (should not block)
+	// Try to publish another event (should not block but will be dropped)
 	evt2 := Event{
 		Type:      EventBargeIn,
 		Timestamp: time.Now(),
@@ -144,10 +147,11 @@ func TestEventBusChannelBlocking(t *testing.T) {
 
 	// Use WaitGroup to ensure the publish operation completes
 	var wg sync.WaitGroup
+	var secondDelivered bool
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		bus.Publish(evt2)
+		secondDelivered = bus.Publish(evt2)
 	}()
 
 	// Wait for a short time to ensure the publish operation completes
@@ -160,6 +164,9 @@ func TestEventBusChannelBlocking(t *testing.T) {
 	select {
 	case <-done:
 		// Test passed - publish did not block
+		if secondDelivered {
+			t.Error("Second event should be dropped when channel is full")
+		}
 	case <-time.After(100 * time.Millisecond):
 		t.Error("Publish operation blocked when channel was full")
 	}

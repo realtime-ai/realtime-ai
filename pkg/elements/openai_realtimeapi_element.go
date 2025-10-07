@@ -45,7 +45,7 @@ func NewOpenAIRealtimeAPIElement() *OpenAIRealtimeAPIElement {
 	}
 
 	return &OpenAIRealtimeAPIElement{
-		BaseElement: pipeline.NewBaseElement(100),
+		BaseElement: pipeline.NewBaseElement("openai-realtime-element", 100),
 		dumper:      dumper,
 	}
 }

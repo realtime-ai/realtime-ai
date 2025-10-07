@@ -49,7 +49,7 @@ func NewPlayoutSinkElement() *PlayoutSinkElement {
 	encoder.SetComplexity(10) // 最高质量
 
 	return &PlayoutSinkElement{
-		BaseElement: pipeline.NewBaseElement(100),
+		BaseElement: pipeline.NewBaseElement("playout-sink-element", 100),
 		playout:     playout,
 		dumper:      dumper,
 		encoder:     encoder,

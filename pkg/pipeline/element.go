@@ -24,6 +24,7 @@ type Element interface {
 	SetBus(bus Bus)
 	SetProperty(name string, value interface{}) error
 	GetProperty(name string) (interface{}, error)
+	GetName() string
 }
 
 type ElementWithProperties interface {
@@ -33,6 +34,7 @@ type ElementWithProperties interface {
 }
 
 type BaseElement struct {
+	name          string
 	propertyDescs map[string]PropertyDesc // 保存此元素"可用属性"的描述信息
 	properties    map[string]interface{}  // 保存此元素"当前属性值"
 	bus           Bus
@@ -41,13 +43,18 @@ type BaseElement struct {
 	OutChan chan *PipelineMessage
 }
 
-func NewBaseElement(bufferSize int) *BaseElement {
+func NewBaseElement(name string, bufferSize int) *BaseElement {
 	return &BaseElement{
+		name:          name,
 		InChan:        make(chan *PipelineMessage, bufferSize),
 		OutChan:       make(chan *PipelineMessage, bufferSize),
 		propertyDescs: make(map[string]PropertyDesc),
 		properties:    make(map[string]interface{}),
 	}
+}
+
+func (b *BaseElement) GetName() string {
+	return b.name
 }
 
 func (b *BaseElement) Init(ctx context.Context) error {

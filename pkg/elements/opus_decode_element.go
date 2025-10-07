@@ -40,7 +40,7 @@ func NewOpusDecodeElement(sampleRate int, channels int) *OpusDecodeElement {
 	}
 
 	return &OpusDecodeElement{
-		BaseElement: pipeline.NewBaseElement(100),
+		BaseElement: pipeline.NewBaseElement("opus-decode-element", 100),
 		decoder:     decoder,
 		sampleRate:  sampleRate,
 		channels:    channels,

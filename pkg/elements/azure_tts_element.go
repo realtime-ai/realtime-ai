@@ -34,7 +34,7 @@ type AzureTTSElement struct {
 
 func NewAzureTTSElement() *AzureTTSElement {
 	return &AzureTTSElement{
-		BaseElement:     pipeline.NewBaseElement(100),
+		BaseElement:     pipeline.NewBaseElement("azure-tts-element", 100),
 		subscriptionKey: os.Getenv("AZURE_SPEECH_KEY"),
 		region:          os.Getenv("AZURE_SPEECH_REGION"),
 		language:        "zh-CN",

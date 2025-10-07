@@ -33,7 +33,7 @@ func NewOpusEncodeElement(bufferSize int, sampleRate int, channels int) *OpusEnc
 	encoder.SetComplexity(10) // 最高质量
 
 	return &OpusEncodeElement{
-		BaseElement: pipeline.NewBaseElement(bufferSize),
+		BaseElement: pipeline.NewBaseElement("opus-encode-element", bufferSize),
 		encoder:     encoder,
 		sampleRate:  sampleRate,
 		channels:    channels,

@@ -102,14 +102,39 @@ func (p *Pipeline) AddElements(elements []Element) {
 	p.elements = append(p.elements, elements...)
 }
 
-func (p *Pipeline) Link(a, b Element) {
-	// a.Out() -> b.In()
+// Link 连接两个 Element，返回一个取消函数用于断开连接
+// 返回的函数调用后会停止数据传输并关闭目标 Element 的输入通道
+func (p *Pipeline) Link(a, b Element) func() {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+
 	go func() {
-		for msg := range a.Out() {
-			b.In() <- msg
+		defer close(done)
+		for {
+			select {
+			case <-ctx.Done():
+				// 取消连接，退出
+				return
+			case msg, ok := <-a.Out():
+				if !ok {
+					// 源通道已关闭
+					close(b.In())
+					return
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case b.In() <- msg:
+				}
+			}
 		}
-		close(b.In())
 	}()
+
+	// 返回取消函数
+	return func() {
+		cancel()
+		<-done // 等待 goroutine 退出
+	}
 }
 
 func (p *Pipeline) Bus() Bus {
@@ -154,5 +179,7 @@ func (p *Pipeline) Stop() error {
 			return err
 		}
 	}
+	// 停止事件总线
+	p.bus.Stop()
 	return nil
 }

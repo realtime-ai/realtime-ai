@@ -46,7 +46,7 @@ func NewAudioResampleElement(inRate, outRate int, inChannels, outChannels int) *
 	}
 
 	return &AudioResampleElement{
-		BaseElement: pipeline.NewBaseElement(100),
+		BaseElement: pipeline.NewBaseElement("audio-resample-element", 100),
 		inRate:      inRate,
 		outRate:     outRate,
 		inChannels:  inChannels,

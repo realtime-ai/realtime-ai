@@ -39,7 +39,7 @@ func NewGeminiElement() *GeminiElement {
 	}
 
 	return &GeminiElement{
-		BaseElement: pipeline.NewBaseElement(100),
+		BaseElement: pipeline.NewBaseElement("gemini-element", 100),
 		dumper:      dumper,
 	}
 }
