@@ -1,0 +1,84 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+        cache: true
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libopus-dev libavcodec-dev libavformat-dev libavutil-dev libswresample-dev
+
+    - name: Download Go modules
+      run: go mod download
+
+    - name: Verify Go modules
+      run: go mod verify
+
+    - name: Run go vet
+      run: go vet ./...
+
+    - name: Run tests
+      run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        files: ./coverage.out
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+        cache: true
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libopus-dev libavcodec-dev libavformat-dev libavutil-dev libswresample-dev
+
+    - name: Download Go modules
+      run: go mod download
+
+    - name: Build examples
+      run: |
+        go build -v ./examples/gemini-assis
+        go build -v ./examples/local-assis
+
+    - name: Build packages
+      run: |
+        go build -v ./pkg/pipeline
+        go build -v ./pkg/connection
+        go build -v ./pkg/server
+        go build -v ./pkg/audio
+        go build -v ./pkg/tokenizer

@@ -1,0 +1,151 @@
+// streaming_ai.proto
+// Protocol Buffers definition for Realtime AI gRPC service
+
+syntax = "proto3";
+
+package streamingai.v1;
+
+option go_package = "github.com/realtime-ai/realtime-ai/pkg/proto/streamingai/v1;streamingaiv1";
+
+// ============== Service Definition ==============
+
+service StreamingAIService {
+  // BiDirectionalStreaming: Bidirectional streaming RPC for real-time audio/video/text exchange
+  rpc BiDirectionalStreaming(stream StreamMessage) returns (stream StreamMessage);
+
+  // Optional: Separate session management
+  rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+  rpc CloseSession(CloseSessionRequest) returns (CloseSessionResponse);
+}
+
+// ============== Message Types ==============
+
+message StreamMessage {
+  // Session ID
+  string session_id = 1;
+
+  // Message type
+  MessageType type = 2;
+
+  // Timestamp (Unix nanoseconds)
+  int64 timestamp = 3;
+
+  // Payload (oneof ensures only one field is set)
+  oneof payload {
+    AudioFrame audio = 10;
+    VideoFrame video = 11;
+    TextMessage text = 12;
+    ControlMessage control = 13;
+  }
+
+  // Metadata
+  map<string, string> metadata = 20;
+}
+
+enum MessageType {
+  MESSAGE_TYPE_UNSPECIFIED = 0;
+  MESSAGE_TYPE_AUDIO = 1;
+  MESSAGE_TYPE_VIDEO = 2;
+  MESSAGE_TYPE_TEXT = 3;
+  MESSAGE_TYPE_CONTROL = 4;
+}
+
+// ============== Audio Data ==============
+
+message AudioFrame {
+  // Audio data (PCM or encoded)
+  bytes data = 1;
+
+  // Audio parameters
+  int32 sample_rate = 2;  // Sample rate (e.g., 16000, 48000)
+  int32 channels = 3;     // Number of channels (1=mono, 2=stereo)
+
+  // Media type
+  string media_type = 4;  // "audio/x-raw", "audio/opus", "audio/pcm"
+  string codec = 5;       // "opus", "pcm", etc.
+
+  // Audio features
+  int32 duration_ms = 6;  // Frame duration in milliseconds
+}
+
+// ============== Video Data ==============
+
+message VideoFrame {
+  bytes data = 1;
+
+  int32 width = 2;
+  int32 height = 3;
+  string media_type = 4;  // "video/x-raw", "video/vp8"
+  string format = 5;      // "I420", "RGBA"
+  string codec = 6;       // "vp8", "h264"
+
+  int32 framerate_num = 7;
+  int32 framerate_denom = 8;
+}
+
+// ============== Text Message ==============
+
+message TextMessage {
+  bytes data = 1;
+  string text_type = 2;  // "plain", "json", "markdown"
+}
+
+// ============== Control Message ==============
+
+message ControlMessage {
+  ControlType control_type = 1;
+
+  oneof control_data {
+    ConnectionStateChange state_change = 10;
+    ErrorInfo error = 11;
+    ConfigUpdate config = 12;
+  }
+}
+
+enum ControlType {
+  CONTROL_TYPE_UNSPECIFIED = 0;
+  CONTROL_TYPE_STATE_CHANGE = 1;
+  CONTROL_TYPE_ERROR = 2;
+  CONTROL_TYPE_CONFIG = 3;
+  CONTROL_TYPE_PING = 4;
+  CONTROL_TYPE_PONG = 5;
+}
+
+message ConnectionStateChange {
+  ConnectionState state = 1;
+}
+
+enum ConnectionState {
+  CONNECTION_STATE_UNSPECIFIED = 0;
+  CONNECTION_STATE_CONNECTING = 1;
+  CONNECTION_STATE_CONNECTED = 2;
+  CONNECTION_STATE_DISCONNECTED = 3;
+  CONNECTION_STATE_FAILED = 4;
+}
+
+message ErrorInfo {
+  string code = 1;
+  string message = 2;
+}
+
+message ConfigUpdate {
+  map<string, string> settings = 1;
+}
+
+// ============== Session Management ==============
+
+message CreateSessionRequest {
+  map<string, string> config = 1;
+}
+
+message CreateSessionResponse {
+  string session_id = 1;
+}
+
+message CloseSessionRequest {
+  string session_id = 1;
+}
+
+message CloseSessionResponse {
+  bool success = 1;
+}
