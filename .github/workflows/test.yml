@@ -21,15 +21,52 @@ jobs:
         go-version: '1.23'
         cache: true
 
-    - name: Install system dependencies
+    - name: Cache FFmpeg
+      id: cache-ffmpeg
+      uses: actions/cache@v4
+      with:
+        path: ~/ffmpeg
+        key: ffmpeg-6.1-${{ runner.os }}
+
+    - name: Install build dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y software-properties-common
-        sudo add-apt-repository -y ppa:savoury1/ffmpeg6
-        sudo add-apt-repository -y ppa:savoury1/multimedia
-        sudo apt-get update
-        sudo apt-get install -y pkg-config libopus-dev libopusfile-dev
-        sudo apt-get install -y --no-install-recommends libavcodec-dev libavformat-dev libavutil-dev libswresample-dev libavdevice-dev libavfilter-dev libswscale-dev
+        sudo apt-get install -y \
+          build-essential \
+          pkg-config \
+          yasm \
+          libopus-dev \
+          libopusfile-dev \
+          libx264-dev \
+          libx265-dev \
+          libvpx-dev \
+          libmp3lame-dev
+
+    - name: Build and install FFmpeg from source
+      if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
+      run: |
+        cd ~
+        wget -q https://ffmpeg.org/releases/ffmpeg-6.1.tar.xz
+        tar xf ffmpeg-6.1.tar.xz
+        cd ffmpeg-6.1
+        ./configure \
+          --prefix=$HOME/ffmpeg \
+          --enable-gpl \
+          --enable-libopus \
+          --enable-libx264 \
+          --enable-libx265 \
+          --enable-libvpx \
+          --enable-libmp3lame \
+          --enable-shared \
+          --disable-static
+        make -j$(nproc)
+        make install
+
+    - name: Set FFmpeg environment variables
+      run: |
+        echo "PKG_CONFIG_PATH=$HOME/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
+        echo "LD_LIBRARY_PATH=$HOME/ffmpeg/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+        echo "$HOME/ffmpeg/bin" >> $GITHUB_PATH
 
     - name: Download Go modules
       run: go mod download
@@ -67,15 +104,52 @@ jobs:
         go-version: '1.23'
         cache: true
 
-    - name: Install system dependencies
+    - name: Cache FFmpeg
+      id: cache-ffmpeg
+      uses: actions/cache@v4
+      with:
+        path: ~/ffmpeg
+        key: ffmpeg-6.1-${{ runner.os }}
+
+    - name: Install build dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y software-properties-common
-        sudo add-apt-repository -y ppa:savoury1/ffmpeg6
-        sudo add-apt-repository -y ppa:savoury1/multimedia
-        sudo apt-get update
-        sudo apt-get install -y pkg-config libopus-dev libopusfile-dev
-        sudo apt-get install -y --no-install-recommends libavcodec-dev libavformat-dev libavutil-dev libswresample-dev libavdevice-dev libavfilter-dev libswscale-dev
+        sudo apt-get install -y \
+          build-essential \
+          pkg-config \
+          yasm \
+          libopus-dev \
+          libopusfile-dev \
+          libx264-dev \
+          libx265-dev \
+          libvpx-dev \
+          libmp3lame-dev
+
+    - name: Build and install FFmpeg from source
+      if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
+      run: |
+        cd ~
+        wget -q https://ffmpeg.org/releases/ffmpeg-6.1.tar.xz
+        tar xf ffmpeg-6.1.tar.xz
+        cd ffmpeg-6.1
+        ./configure \
+          --prefix=$HOME/ffmpeg \
+          --enable-gpl \
+          --enable-libopus \
+          --enable-libx264 \
+          --enable-libx265 \
+          --enable-libvpx \
+          --enable-libmp3lame \
+          --enable-shared \
+          --disable-static
+        make -j$(nproc)
+        make install
+
+    - name: Set FFmpeg environment variables
+      run: |
+        echo "PKG_CONFIG_PATH=$HOME/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
+        echo "LD_LIBRARY_PATH=$HOME/ffmpeg/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+        echo "$HOME/ffmpeg/bin" >> $GITHUB_PATH
 
     - name: Download Go modules
       run: go mod download
