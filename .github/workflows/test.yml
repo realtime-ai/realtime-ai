@@ -26,7 +26,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/ffmpeg
-        key: ffmpeg-6.1-v2-${{ runner.os }}
+        key: ffmpeg-7.0-${{ runner.os }}
 
     - name: Install build dependencies
       run: |
@@ -47,9 +47,9 @@ jobs:
       if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
       run: |
         cd ~
-        wget -q https://ffmpeg.org/releases/ffmpeg-6.1.tar.xz
-        tar xf ffmpeg-6.1.tar.xz
-        cd ffmpeg-6.1
+        wget -q https://ffmpeg.org/releases/ffmpeg-7.0.tar.xz
+        tar xf ffmpeg-7.0.tar.xz
+        cd ffmpeg-7.0
         ./configure \
           --prefix=$HOME/ffmpeg \
           --enable-gpl \
@@ -131,7 +131,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/ffmpeg
-        key: ffmpeg-6.1-v2-${{ runner.os }}
+        key: ffmpeg-7.0-${{ runner.os }}
 
     - name: Install build dependencies
       run: |
@@ -152,9 +152,9 @@ jobs:
       if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
       run: |
         cd ~
-        wget -q https://ffmpeg.org/releases/ffmpeg-6.1.tar.xz
-        tar xf ffmpeg-6.1.tar.xz
-        cd ffmpeg-6.1
+        wget -q https://ffmpeg.org/releases/ffmpeg-7.0.tar.xz
+        tar xf ffmpeg-7.0.tar.xz
+        cd ffmpeg-7.0
         ./configure \
           --prefix=$HOME/ffmpeg \
           --enable-gpl \
