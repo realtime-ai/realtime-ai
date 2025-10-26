@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log"
-	"os"
 	"time"
 
 	"google.golang.org/grpc"
@@ -179,12 +177,6 @@ func runClient() {
 }
 
 func main() {
-	// Check if running as server or client
-	if len(os.Args) > 1 && os.Args[1] == "client" {
-		runClient()
-	} else {
-		// Default: run as server (main.go behavior)
-		fmt.Println("Usage: go run examples/grpc-assis/client.go client")
-		fmt.Println("To run server: go run examples/grpc-assis/server.go")
-	}
+	log.Println("[Client] Starting gRPC client example")
+	runClient()
 }
