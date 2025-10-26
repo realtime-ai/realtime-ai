@@ -1,103 +1,267 @@
 # Realtime AI
 
-A real-time Agent framework for audio and video.
+<div align="center">
 
-**Note that this project is under active development.**
+**A high-performance real-time AI framework for audio and video processing**
 
-## Project Overview
+[![Go Version](https://img.shields.io/badge/Go-1.23%2B-00ADD8?style=flat&logo=go)](https://golang.org)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/Status-Active%20Development-orange)](https://github.com/realtime-ai/realtime-ai)
 
-The project consists of three main components:
+</div>
 
-- **AI SDK**: Captures and processes audio and video streams on the client side using the WebRTC protocol, including tasks such as audio/video encoding and preliminary inference.
+---
 
-- **WebRTC Gateway**: Manages signaling, handles NAT/firewall traversal, and forwards media streams. It also supports load balancing with the AI Service.
+## 📖 Overview
 
-- **AI Service**: Provides real-time inference and data processing capabilities, including speech recognition, image recognition, real-time subtitle generation, speech synthesis, and interactive real-time large model interactions.
+**Realtime AI** is a real-time AI framework built on WebRTC for low-latency audio and video processing. It features a **GStreamer-inspired pipeline architecture** that enables modular, composable processing elements for building sophisticated AI-powered real-time applications.
 
-## Key Features
+### Architecture
 
-- **User-Friendly**: Designed for ease of use with straightforward integration.
-
-- **WebRTC-Based**: Utilizes WebRTC for audio and video transmission and employs Data Channels for signaling.
-
-- **Flexible AI Pipeline**: AI services are processed through a pipeline architecture, allowing for customizable and modular assembly.
-
-- **Optimized for Real-Time Scenarios**: Specifically engineered to meet the demands of real-time applications, ensuring low latency and high performance.
-
-
-##  Plans
+The framework is organized into three main layers:
 
 ```
-- [x] WebRTC Server
-- [x] Support Gemini Multimodal Live API
-- [x] Support OpenAI Realtime API
-- [x] Video support
-- [x] Support Interruption
-- [x] Split WebRTC Gateway and AI Service
-- [x] Better Pipeline Design(like Gstreamer)
-- [ ] Support ASR/LLM/TTS Pipeline
-- [ ] Support JSON-RPC 
-- [ ] Support Custom CMD
+┌─────────────────────────────────────────────────────────────┐
+│                        Client (Browser)                      │
+│                   WebRTC Audio/Video Streams                 │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+┌─────────────────────▼───────────────────────────────────────┐
+│                    WebRTC Gateway                            │
+│         Signaling • NAT Traversal • Stream Routing          │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+┌─────────────────────▼───────────────────────────────────────┐
+│                      AI Service                              │
+│    Pipeline: Decode → STT → LLM → TTS → Encode → Playout   │
+│  Elements: Gemini • OpenAI • Azure • Opus • Resample • VAD  │
+└─────────────────────────────────────────────────────────────┘
 ```
 
+**Components:**
 
-## Prerequisites
+- **WebRTC Gateway**: Handles WebRTC signaling, ICE negotiation, and media stream forwarding
+- **AI Service**: Processes audio/video through a modular pipeline of AI elements
+- **Pipeline System**: GStreamer-like architecture for connecting and managing processing elements
 
-- Go 1.21 or higher
-- FFmpeg libraries (for audio processing)
-- Opus codec library
-- Google API Key for Gemini AI
-- OpenAI API Key for OpenAI Realtime API
+## ✨ Key Features
 
-## Installation
+- **🎯 Low Latency**: Optimized for real-time interactions with minimal delay
+- **🔌 Modular Pipeline**: GStreamer-inspired design with composable processing elements
+- **🌐 WebRTC Native**: Built-in support for WebRTC signaling and media streaming
+- **🤖 AI Integrations**: Ready-to-use elements for Gemini, OpenAI Realtime API, Azure STT/TTS
+- **🎙️ Audio Processing**: Opus codec, resampling, VAD, and playout capabilities
+- **🎥 Video Support**: Process video streams alongside audio
+- **⚡ Interruption Handling**: Support for real-time interruptions in conversations
+- **🧩 Extensible**: Easy to add custom processing elements
 
-1. Install system dependencies:
+## 🚀 Quick Start
 
+### Prerequisites
+
+- **Go 1.23+**
+- **FFmpeg** and **Opus** libraries
+- **API Keys**: Google API Key (for Gemini) or OpenAI API Key
+
+### Installation
+
+**macOS:**
 ```bash
-# For Debian/Ubuntu
-apt-get install pkg-config libopus-dev libavcodec-dev libavformat-dev libavutil-dev libswresample-dev
-
-# For macOS
 brew install opus ffmpeg
 ```
 
-2. Clone the repository:
+**Ubuntu/Debian:**
+```bash
+apt-get install pkg-config libopus-dev libavcodec-dev libavformat-dev libavutil-dev libswresample-dev
+```
 
+**Clone and setup:**
 ```bash
 git clone https://github.com/realtime-ai/realtime-ai.git
 cd realtime-ai
-```
-
-3. Install Go dependencies:
-
-```bash
 go mod download
 ```
 
-## Configuration
+### Configuration
 
-1. Set up environment variables:
+Set your API keys:
 
 ```bash
-# Required
-export GOOGLE_API_KEY=your_api_key_here
-
-export OPENAI_API_KEY=your_api_key_here
+export GOOGLE_API_KEY="your_google_api_key_here"
+export OPENAI_API_KEY="your_openai_api_key_here"
 ```
 
-## Running the Application
+### Run Examples
 
-
-1、Start the server:
-
+**Gemini Multimodal Assistant:**
 ```bash
-# use  gemini by default
 go run examples/gemini-assis/main.go
 ```
 
-2、 Open the WebRTC Client:
+**Local Connection Test:**
+```bash
+go run examples/local-assis/main.go
+```
 
-Chrome Browser Open `http://localhost:8080`
+**Access the web client:**
+```bash
+open http://localhost:8080
+```
+
+## 📚 Core Concepts
+
+### Pipeline System
+
+The framework uses a **Pipeline** that connects multiple **Elements** together, inspired by GStreamer:
+
+```go
+// Create pipeline
+pipeline := pipeline.NewPipeline("my-pipeline")
+
+// Add elements
+resample := elements.NewAudioResampleElement("resample")
+gemini := elements.NewGeminiElement("gemini", apiKey)
+playout := elements.NewPlayoutSinkElement("playout")
+
+// Link elements: resample → gemini → playout
+pipeline.Link(resample, gemini)
+pipeline.Link(gemini, playout)
+
+// Start processing
+pipeline.Start(ctx)
+
+// Push audio data
+pipeline.Push(audioMessage)
+
+// Pull processed results
+result := pipeline.Pull()
+```
+
+### Elements
+
+Elements are modular processing units. Available elements include:
+
+**AI Models:**
+- `GeminiElement` - Google Gemini multimodal API
+- `OpenAIRealtimeAPIElement` - OpenAI Realtime API
+
+**Audio Processing:**
+- `OpusDecodeElement` / `OpusEncodeElement` - Opus codec
+- `AudioResampleElement` - Audio resampling
+- `PlayoutSinkElement` - Audio playback
+- `VADElement` - Voice activity detection
+
+**Speech Services:**
+- `AzureSTTElement` - Azure Speech-to-Text
+- `AzureTTSElement` - Azure Text-to-Speech
+
+### Creating Custom Elements
+
+Extend `BaseElement` and implement the `Element` interface:
+
+```go
+type MyElement struct {
+    *pipeline.BaseElement
+}
+
+func (e *MyElement) Start(ctx context.Context) error {
+    e.Context, e.CancelFunc = context.WithCancel(ctx)
+
+    go func() {
+        for {
+            select {
+            case msg := <-e.In():
+                // Process message
+                e.Out() <- processedMsg
+            case <-e.Context.Done():
+                return
+            }
+        }
+    }()
+
+    return nil
+}
+```
+
+## 📂 Project Structure
+
+```
+realtime-ai/
+├── pkg/
+│   ├── pipeline/      # Core pipeline system (Pipeline, Element, Bus)
+│   ├── elements/      # Processing elements (AI, codecs, sinks)
+│   ├── connection/    # Connection abstractions (WebRTC, local, WebSocket)
+│   ├── server/        # HTTP/WebRTC server
+│   ├── audio/         # Audio utilities (resample, playout)
+│   └── tokenizer/     # Text tokenization for streaming
+├── examples/
+│   ├── gemini-assis/  # Gemini multimodal assistant
+│   ├── local-assis/   # Local connection example
+│   └── grpc-assis/    # gRPC-based assistant
+├── docs/              # Documentation
+└── tests/             # Test files
+```
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+go test ./...
+
+# Test specific package
+go test ./pkg/pipeline
+go test ./pkg/audio
+
+# Run specific test
+go test ./pkg/pipeline -run TestBus
+```
+
+## 🛣️ Roadmap
+
+- [x] WebRTC Server
+- [x] Gemini Multimodal Live API
+- [x] OpenAI Realtime API
+- [x] Video support
+- [x] Interruption handling
+- [x] Split WebRTC Gateway and AI Service
+- [x] GStreamer-like Pipeline Design
+- [ ] ASR/LLM/TTS Pipeline
+- [ ] JSON-RPC support
+- [ ] Custom CMD protocol
+- [ ] More AI service integrations
+- [ ] Performance benchmarks
+
+## 🐛 Debug Options
+
+Enable debugging with environment variables:
+
+```bash
+export DUMP_GEMINI_INPUT=true      # Dump Gemini input audio
+export DUMP_PLAYOUT_OUTPUT=true    # Dump playout output audio
+```
+
+## 📖 Documentation
+
+- [CLAUDE.md](CLAUDE.md) - Development guidelines and architecture details
+- [WebRTC Protocol](docs/webrtc-protocol.md) - WebRTC signaling protocol specification
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit issues and pull requests.
+
+## 📄 License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+## ⚠️ Status
+
+**This project is under active development.** APIs may change without notice. Use in production at your own risk.
+
+---
+
+<div align="center">
+Made with ❤️ by the Realtime AI Team
+</div>
 
 
 
