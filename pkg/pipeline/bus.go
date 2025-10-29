@@ -19,6 +19,8 @@ const (
 	EventInterrupted   EventType = "Interrupted"
 	EventStarted       EventType = "Started"
 	EventStopped       EventType = "Stopped"
+	EventVADSpeechStart EventType = "VADSpeechStart"
+	EventVADSpeechEnd   EventType = "VADSpeechEnd"
 	// 可继续扩展更多事件类型...
 )
 
