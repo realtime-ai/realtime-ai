@@ -22,6 +22,12 @@ brew install opus ffmpeg
 # Install Go dependencies
 go mod download
 
+# Build (standard - VAD disabled)
+go build ./...
+
+# Build with VAD support (requires ONNX Runtime)
+go build -tags vad ./...
+
 # Run examples
 go run examples/gemini-assis/main.go      # Gemini multimodal assistant
 go run examples/local-assis/main.go       # Local connection example
@@ -30,6 +36,10 @@ go run examples/openai-realtime/main.go   # OpenAI Realtime API
 # Open web client
 open http://localhost:8080
 ```
+
+### Optional Features
+
+**VAD (Voice Activity Detection)**: The Silero VAD element is optional and requires ONNX Runtime. See `pkg/elements/VAD_README.md` for setup instructions. Build with `-tags vad` to enable.
 
 ### Testing
 ```bash
@@ -93,7 +103,7 @@ The core of the framework is a **Pipeline** that connects multiple **Elements** 
 - `OpusEncodeElement`: Opus audio encoding
 - `AudioResampleElement`: Audio resampling
 - `PlayoutSinkElement`: Audio playback sink
-- `VADElement`: Voice activity detection
+- `SileroVADElement`: Voice activity detection (optional, requires `-tags vad`)
 
 ### Connection System
 
