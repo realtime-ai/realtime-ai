@@ -200,7 +200,7 @@ func (c *rtcConnectionImpl) Start(ctx context.Context) error {
 
 		c.dataChannel = dc
 
-		c.readDataChannel(ctx)
+		c.readDataChannel()
 	})
 
 	transceiver, err := c.pc.AddTransceiverFromKind(webrtc.RTPCodecTypeAudio, webrtc.RTPTransceiverInit{
@@ -331,7 +331,7 @@ func (c *rtcConnectionImpl) readRemoteAudio(ctx context.Context) {
 	}
 }
 
-func (c *rtcConnectionImpl) readDataChannel(ctx context.Context) {
+func (c *rtcConnectionImpl) readDataChannel() {
 
 	c.dataChannel.OnMessage(func(data webrtc.DataChannelMessage) {
 
@@ -348,6 +348,4 @@ func (c *rtcConnectionImpl) readDataChannel(ctx context.Context) {
 
 		c.handler.OnMessage(msg)
 	})
-
-	<-ctx.Done()
 }
