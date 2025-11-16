@@ -3,12 +3,11 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"github.com/pion/webrtc/v4"
 	"github.com/realtime-ai/realtime-ai/pkg/connection"
@@ -100,12 +99,20 @@ func main() {
 		log.Printf("Connection error: %v", err)
 	})
 
-	// Start HTTP server
+	// Start WebRTC server
+	if err := rtcServer.Start(); err != nil {
+		log.Fatalf("Failed to start WebRTC server: %v", err)
+	}
+
+	// Set up HTTP handlers
+	http.HandleFunc("/session", rtcServer.HandleNegotiate)
+
+	// Start HTTP server in a goroutine
 	go func() {
 		log.Println("Starting HTTP server on :8080")
 		log.Println("Open http://localhost:8080 in your browser")
-		if err := rtcServer.Start(":8080"); err != nil {
-			log.Fatalf("Failed to start server: %v", err)
+		if err := http.ListenAndServe(":8080", nil); err != nil {
+			log.Fatalf("Failed to start HTTP server: %v", err)
 		}
 	}()
 
