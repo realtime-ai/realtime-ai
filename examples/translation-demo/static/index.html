@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Transcription + Translation Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 900px;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .control-group label {
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+
+        select {
+            padding: 10px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            background: white;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+
+        select:hover {
+            border-color: #667eea;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex: 1;
+            justify-content: flex-end;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-start {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-start:hover:not(:disabled) {
+            background: #059669;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+
+        .btn-stop {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-stop:hover:not(:disabled) {
+            background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px;
+            background: #f3f4f6;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #9ca3af;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.connected {
+            background: #10b981;
+        }
+
+        .status-indicator.recording {
+            background: #ef4444;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .status-text {
+            font-size: 14px;
+            color: #374151;
+            font-weight: 500;
+        }
+
+        .subtitles-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .subtitle-box {
+            background: #f9fafb;
+            border-radius: 12px;
+            padding: 20px;
+            min-height: 120px;
+            position: relative;
+            border: 2px solid #e5e7eb;
+            transition: border-color 0.3s;
+        }
+
+        .subtitle-box.active {
+            border-color: #667eea;
+            background: #f5f3ff;
+        }
+
+        .subtitle-label {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #6b7280;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .subtitle-label .flag {
+            font-size: 18px;
+        }
+
+        .subtitle-text {
+            font-size: 18px;
+            line-height: 1.6;
+            color: #111827;
+            min-height: 60px;
+        }
+
+        .subtitle-text.empty {
+            color: #9ca3af;
+            font-style: italic;
+        }
+
+        .partial-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #667eea;
+            border-radius: 50%;
+            margin-left: 5px;
+            animation: pulse 1s infinite;
+        }
+
+        .footer {
+            padding: 20px 30px;
+            background: #f9fafb;
+            border-top: 1px solid #e5e7eb;
+            text-align: center;
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 600px) {
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .button-group {
+                justify-content: stretch;
+            }
+
+            button {
+                flex: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌐 Real-time Translation Demo</h1>
+            <p>Speak in one language, see instant translation in another</p>
+        </div>
+
+        <div class="content">
+            <div class="controls">
+                <div class="control-group">
+                    <label for="sourceLang">Source:</label>
+                    <select id="sourceLang">
+                        <option value="zh">🇨🇳 Chinese</option>
+                        <option value="en">🇺🇸 English</option>
+                        <option value="ja">🇯🇵 Japanese</option>
+                        <option value="ko">🇰🇷 Korean</option>
+                        <option value="es">🇪🇸 Spanish</option>
+                        <option value="fr">🇫🇷 French</option>
+                        <option value="de">🇩🇪 German</option>
+                        <option value="ru">🇷🇺 Russian</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label for="targetLang">Target:</label>
+                    <select id="targetLang">
+                        <option value="en">🇺🇸 English</option>
+                        <option value="zh">🇨🇳 Chinese</option>
+                        <option value="ja">🇯🇵 Japanese</option>
+                        <option value="ko">🇰🇷 Korean</option>
+                        <option value="es">🇪🇸 Spanish</option>
+                        <option value="fr">🇫🇷 French</option>
+                        <option value="de">🇩🇪 German</option>
+                        <option value="ru">🇷🇺 Russian</option>
+                    </select>
+                </div>
+
+                <div class="button-group">
+                    <button id="startBtn" class="btn-start">
+                        <span>🎤</span>
+                        <span>Start Recording</span>
+                    </button>
+                    <button id="stopBtn" class="btn-stop" disabled>
+                        <span>⏹️</span>
+                        <span>Stop</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="status">
+                <div class="status-indicator" id="statusIndicator"></div>
+                <div class="status-text" id="statusText">Ready to connect</div>
+            </div>
+
+            <div class="subtitles-container">
+                <div class="subtitle-box" id="originalBox">
+                    <div class="subtitle-label">
+                        <span class="flag">🎤</span>
+                        <span>ORIGINAL (Transcription)</span>
+                    </div>
+                    <div class="subtitle-text empty" id="originalText">
+                        Waiting for speech...
+                    </div>
+                </div>
+
+                <div class="subtitle-box" id="translationBox">
+                    <div class="subtitle-label">
+                        <span class="flag">🌐</span>
+                        <span>TRANSLATION</span>
+                    </div>
+                    <div class="subtitle-text empty" id="translationText">
+                        Translation will appear here...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            Powered by <a href="https://github.com/realtime-ai/realtime-ai" target="_blank">Realtime AI Framework</a>
+            | OpenAI Whisper + GPT-4o-mini
+        </div>
+    </div>
+
+    <script>
+        let peerConnection = null;
+        let audioStream = null;
+        let dataChannel = null;
+        let isRecording = false;
+
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+        const originalText = document.getElementById('originalText');
+        const translationText = document.getElementById('translationText');
+        const originalBox = document.getElementById('originalBox');
+        const translationBox = document.getElementById('translationBox');
+
+        startBtn.addEventListener('click', startRecording);
+        stopBtn.addEventListener('click', stopRecording);
+
+        async function startRecording() {
+            try {
+                updateStatus('connecting', 'Requesting microphone access...');
+
+                // Get microphone access
+                audioStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                    }
+                });
+
+                updateStatus('connecting', 'Connecting to server...');
+
+                // Create peer connection
+                peerConnection = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+
+                // Add audio track
+                audioStream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, audioStream);
+                });
+
+                // Create data channel for receiving text
+                dataChannel = peerConnection.createDataChannel('data');
+                dataChannel.onopen = () => {
+                    console.log('Data channel opened');
+                };
+                dataChannel.onmessage = handleDataChannelMessage;
+
+                // Handle ICE candidates
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        console.log('ICE candidate:', event.candidate);
+                    }
+                };
+
+                // Handle connection state changes
+                peerConnection.onconnectionstatechange = () => {
+                    console.log('Connection state:', peerConnection.connectionState);
+                    if (peerConnection.connectionState === 'connected') {
+                        updateStatus('connected', 'Connected - Speak now!');
+                        isRecording = true;
+                        startBtn.disabled = true;
+                        stopBtn.disabled = false;
+                    } else if (peerConnection.connectionState === 'failed' ||
+                               peerConnection.connectionState === 'closed') {
+                        updateStatus('disconnected', 'Connection lost');
+                        stopRecording();
+                    }
+                };
+
+                // Create and send offer
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+
+                // Send offer to server
+                const response = await fetch('/session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sdp: offer.sdp,
+                        type: offer.type
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to connect to server');
+                }
+
+                const answer = await response.json();
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+
+                console.log('WebRTC connection established');
+
+            } catch (error) {
+                console.error('Error starting recording:', error);
+                updateStatus('error', 'Error: ' + error.message);
+                stopRecording();
+            }
+        }
+
+        function stopRecording() {
+            if (audioStream) {
+                audioStream.getTracks().forEach(track => track.stop());
+                audioStream = null;
+            }
+
+            if (dataChannel) {
+                dataChannel.close();
+                dataChannel = null;
+            }
+
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+
+            isRecording = false;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            updateStatus('disconnected', 'Disconnected');
+        }
+
+        function handleDataChannelMessage(event) {
+            try {
+                const data = JSON.parse(event.data);
+
+                // Handle different message types
+                if (data.event === 'transcription') {
+                    // Original transcription
+                    const text = data.data.text;
+                    const isPartial = data.data.type === 'partial';
+
+                    originalText.textContent = text + (isPartial ? ' ●' : '');
+                    originalText.classList.remove('empty');
+                    originalBox.classList.add('active');
+
+                    if (!isPartial) {
+                        setTimeout(() => originalBox.classList.remove('active'), 2000);
+                    }
+
+                } else if (data.event === 'translation') {
+                    // Translation result
+                    const text = data.data.text;
+                    translationText.textContent = text;
+                    translationText.classList.remove('empty');
+                    translationBox.classList.add('active');
+                    setTimeout(() => translationBox.classList.remove('active'), 2000);
+
+                } else if (data.event === 'vad') {
+                    // Voice activity detection
+                    if (data.data.type === 'speech_start') {
+                        updateStatus('recording', 'Listening...');
+                    } else if (data.data.type === 'speech_end') {
+                        updateStatus('connected', 'Processing...');
+                    }
+                }
+            } catch (error) {
+                // Handle non-JSON messages (raw text data)
+                const text = event.data;
+                if (text && text.length > 0) {
+                    // Assume this is translation output
+                    translationText.textContent = text;
+                    translationText.classList.remove('empty');
+                    translationBox.classList.add('active');
+                    setTimeout(() => translationBox.classList.remove('active'), 2000);
+                }
+            }
+        }
+
+        function updateStatus(state, message) {
+            statusText.textContent = message;
+            statusIndicator.className = 'status-indicator';
+
+            if (state === 'connected') {
+                statusIndicator.classList.add('connected');
+            } else if (state === 'recording') {
+                statusIndicator.classList.add('recording');
+            }
+        }
+
+        // Handle page unload
+        window.addEventListener('beforeunload', () => {
+            stopRecording();
+        });
+    </script>
+</body>
+</html>
