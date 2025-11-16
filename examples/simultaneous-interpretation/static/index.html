@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Simultaneous Interpretation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 900px;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        button {
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #startBtn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        #startBtn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        #stopBtn {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        #stopBtn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4);
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 500;
+        }
+
+        .status.disconnected {
+            background: #fee;
+            color: #c33;
+        }
+
+        .status.connecting {
+            background: #ffc;
+            color: #993;
+        }
+
+        .status.connected {
+            background: #efe;
+            color: #3a3;
+        }
+
+        .status .indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status.disconnected .indicator {
+            background: #c33;
+        }
+
+        .status.connecting .indicator {
+            background: #fc3;
+        }
+
+        .status.connected .indicator {
+            background: #3a3;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .subtitles {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .subtitle-item {
+            margin-bottom: 15px;
+            padding: 15px;
+            border-radius: 8px;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .subtitle-item.original {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+        }
+
+        .subtitle-item.translation {
+            background: #f3e5f5;
+            border-left: 4px solid #9c27b0;
+        }
+
+        .subtitle-item .label {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+            opacity: 0.7;
+        }
+
+        .subtitle-item .text {
+            font-size: 16px;
+            line-height: 1.5;
+        }
+
+        .subtitle-item.partial {
+            opacity: 0.6;
+        }
+
+        .info-box {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .info-box h3 {
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #856404;
+        }
+
+        .info-box ul {
+            margin-left: 20px;
+            font-size: 13px;
+            color: #856404;
+        }
+
+        .info-box ul li {
+            margin-bottom: 5px;
+        }
+
+        .audio-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .audio-indicator .bars {
+            display: flex;
+            gap: 3px;
+            align-items: flex-end;
+            height: 30px;
+        }
+
+        .audio-indicator .bar {
+            width: 4px;
+            background: #667eea;
+            border-radius: 2px;
+            animation: wave 1s ease-in-out infinite;
+        }
+
+        .audio-indicator .bar:nth-child(1) { animation-delay: 0s; }
+        .audio-indicator .bar:nth-child(2) { animation-delay: 0.1s; }
+        .audio-indicator .bar:nth-child(3) { animation-delay: 0.2s; }
+        .audio-indicator .bar:nth-child(4) { animation-delay: 0.3s; }
+        .audio-indicator .bar:nth-child(5) { animation-delay: 0.4s; }
+
+        @keyframes wave {
+            0%, 100% { height: 5px; }
+            50% { height: 30px; }
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                <span>🌐</span>
+                Real-time Simultaneous Interpretation
+                <span>🎧</span>
+            </h1>
+            <p>Speak in one language, hear it in another - instantly!</p>
+        </div>
+
+        <div class="content">
+            <div class="info-box">
+                <h3>📋 How to Use:</h3>
+                <ul>
+                    <li>Click "Start Interpretation" to begin</li>
+                    <li>Grant microphone permissions when prompted</li>
+                    <li>Speak in your source language</li>
+                    <li>Listen to the real-time interpretation through your speakers/headphones</li>
+                    <li>Optional: View live subtitles below</li>
+                </ul>
+            </div>
+
+            <div class="status disconnected" id="status">
+                <div class="indicator"></div>
+                <span id="statusText">Disconnected</span>
+            </div>
+
+            <div class="controls">
+                <button id="startBtn">
+                    <span>🎤</span>
+                    Start Interpretation
+                </button>
+                <button id="stopBtn" disabled>
+                    <span>⏹️</span>
+                    Stop
+                </button>
+            </div>
+
+            <div id="audioIndicator" class="audio-indicator hidden">
+                <div class="bars">
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                </div>
+                <span>🔊 Listening...</span>
+            </div>
+
+            <div class="subtitles" id="subtitles">
+                <p style="text-align: center; color: #999;">Subtitles will appear here...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // WebRTC connection management
+        let peerConnection = null;
+        let dataChannel = null;
+        let audioContext = null;
+        let mediaStream = null;
+
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const status = document.getElementById('status');
+        const statusText = document.getElementById('statusText');
+        const subtitles = document.getElementById('subtitles');
+        const audioIndicator = document.getElementById('audioIndicator');
+
+        startBtn.addEventListener('click', start);
+        stopBtn.addEventListener('click', stop);
+
+        async function start() {
+            try {
+                updateStatus('connecting', 'Connecting...');
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+
+                // Initialize audio context for playback
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 48000
+                });
+
+                // Get microphone access
+                mediaStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        channelCount: 1,
+                        sampleRate: 48000,
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+
+                // Create WebRTC peer connection
+                peerConnection = new RTCPeerConnection({
+                    iceServers: []
+                });
+
+                // Add audio track to connection
+                mediaStream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, mediaStream);
+                });
+
+                // Handle incoming audio (interpreted speech)
+                peerConnection.ontrack = (event) => {
+                    console.log('Received remote track:', event.track.kind);
+                    if (event.track.kind === 'audio') {
+                        const remoteAudio = new Audio();
+                        remoteAudio.srcObject = event.streams[0];
+                        remoteAudio.autoplay = true;
+                        remoteAudio.play().catch(e => console.error('Error playing audio:', e));
+                        console.log('Playing interpreted audio');
+                    }
+                };
+
+                // Create data channel for subtitles/events
+                dataChannel = peerConnection.createDataChannel('data');
+                dataChannel.onopen = () => {
+                    console.log('Data channel opened');
+                };
+                dataChannel.onmessage = handleDataChannelMessage;
+
+                // Create and send offer
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+
+                // Send offer to server
+                const response = await fetch('/session', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sdp: offer.sdp,
+                        type: offer.type
+                    })
+                });
+
+                const answer = await response.json();
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+
+                updateStatus('connected', 'Connected - Interpretation Active');
+                audioIndicator.classList.remove('hidden');
+                addSystemMessage('🎧 Interpretation started. Speak into your microphone...');
+
+            } catch (error) {
+                console.error('Error starting interpretation:', error);
+                alert('Failed to start interpretation: ' + error.message);
+                stop();
+            }
+        }
+
+        function stop() {
+            updateStatus('disconnected', 'Disconnected');
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            audioIndicator.classList.add('hidden');
+
+            if (dataChannel) {
+                dataChannel.close();
+                dataChannel = null;
+            }
+
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+
+            addSystemMessage('⏹️ Interpretation stopped');
+        }
+
+        function handleDataChannelMessage(event) {
+            try {
+                const message = JSON.parse(event.data);
+
+                if (message.event === 'transcription') {
+                    // Original transcription
+                    addSubtitle(message.data.text, 'original', message.data.type === 'partial');
+                } else if (message.event === 'translation') {
+                    // Translated text (for display only, audio is played via WebRTC track)
+                    addSubtitle(message.data.text, 'translation', message.data.type === 'partial');
+                } else if (message.event === 'vad') {
+                    // Voice activity detection events
+                    if (message.data.type === 'speech_start') {
+                        console.log('Speech detected');
+                    } else if (message.data.type === 'speech_end') {
+                        console.log('Speech ended');
+                    }
+                }
+            } catch (error) {
+                console.error('Error parsing message:', error);
+            }
+        }
+
+        function addSubtitle(text, type, isPartial = false) {
+            // Remove previous partial if this is a final result
+            if (!isPartial) {
+                const partials = subtitles.querySelectorAll(`.subtitle-item.${type}.partial`);
+                partials.forEach(p => p.remove());
+            }
+
+            const item = document.createElement('div');
+            item.className = `subtitle-item ${type}${isPartial ? ' partial' : ''}`;
+
+            const label = document.createElement('div');
+            label.className = 'label';
+            label.textContent = type === 'original' ? '🎤 Original' : '🌐 Translation';
+
+            const textDiv = document.createElement('div');
+            textDiv.className = 'text';
+            textDiv.textContent = text;
+
+            item.appendChild(label);
+            item.appendChild(textDiv);
+
+            // If partial, update existing or add new
+            if (isPartial) {
+                const existing = subtitles.querySelector(`.subtitle-item.${type}.partial`);
+                if (existing) {
+                    existing.replaceWith(item);
+                } else {
+                    subtitles.appendChild(item);
+                }
+            } else {
+                subtitles.appendChild(item);
+            }
+
+            // Auto-scroll to bottom
+            subtitles.scrollTop = subtitles.scrollHeight;
+        }
+
+        function addSystemMessage(message) {
+            const item = document.createElement('div');
+            item.style.padding = '10px';
+            item.style.textAlign = 'center';
+            item.style.color = '#999';
+            item.style.fontSize = '14px';
+            item.textContent = message;
+            subtitles.appendChild(item);
+            subtitles.scrollTop = subtitles.scrollHeight;
+        }
+
+        function updateStatus(state, text) {
+            status.className = `status ${state}`;
+            statusText.textContent = text;
+        }
+
+        // Handle page unload
+        window.addEventListener('beforeunload', () => {
+            stop();
+        });
+    </script>
+</body>
+</html>
