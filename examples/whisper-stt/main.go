@@ -3,12 +3,11 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"github.com/pion/webrtc/v4"
 	"github.com/realtime-ai/realtime-ai/pkg/connection"
@@ -62,11 +61,16 @@ func main() {
 		log.Fatal("OPENAI_API_KEY environment variable is required")
 	}
 
+	// Create WebRTC server configuration
+	cfg := &server.ServerConfig{
+		RTCUDPPort: 9000,
+	}
+
 	// Create WebRTC server
-	rtcServer := server.NewRTCServer()
+	rtcServer := server.NewRTCServer(cfg)
 
 	// Set up connection handlers
-	rtcServer.OnConnectionCreated = func(conn connection.RTCConnection, ctx context.Context) {
+	rtcServer.OnConnectionCreated(func(ctx context.Context, conn connection.RTCConnection) {
 		log.Printf("New connection created: %s", conn.GetConnectionID())
 
 		// Create event handler
@@ -89,18 +93,26 @@ func main() {
 		go handlePipelineOutput(conn, p)
 
 		log.Println("Pipeline started successfully")
-	}
+	})
 
-	rtcServer.OnConnectionError = func(err error) {
+	rtcServer.OnConnectionError(func(ctx context.Context, conn connection.RTCConnection, err error) {
 		log.Printf("Connection error: %v", err)
+	})
+
+	// Start WebRTC server
+	if err := rtcServer.Start(); err != nil {
+		log.Fatalf("Failed to start WebRTC server: %v", err)
 	}
 
-	// Start HTTP server
+	// Set up HTTP handlers
+	http.HandleFunc("/session", rtcServer.HandleNegotiate)
+
+	// Start HTTP server in a goroutine
 	go func() {
 		log.Println("Starting HTTP server on :8080")
 		log.Println("Open http://localhost:8080 in your browser")
-		if err := rtcServer.Start(":8080"); err != nil {
-			log.Fatalf("Failed to start server: %v", err)
+		if err := http.ListenAndServe(":8080", nil); err != nil {
+			log.Fatalf("Failed to start HTTP server: %v", err)
 		}
 	}()
 
