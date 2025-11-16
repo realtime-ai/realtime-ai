@@ -71,7 +71,7 @@ func main() {
 	rtcServer := server.NewRTCServer(cfg)
 
 	// Set up connection handlers
-	rtcServer.OnConnectionCreated = func(conn connection.RTCConnection, ctx context.Context) {
+	rtcServer.OnConnectionCreated(func(ctx context.Context, conn connection.RTCConnection) {
 		log.Printf("New connection created: %s", conn.GetConnectionID())
 
 		// Create event handler
@@ -94,11 +94,11 @@ func main() {
 		go handlePipelineOutput(conn, p)
 
 		log.Println("Pipeline started successfully")
-	}
+	})
 
-	rtcServer.OnConnectionError = func(err error) {
+	rtcServer.OnConnectionError(func(ctx context.Context, conn connection.RTCConnection, err error) {
 		log.Printf("Connection error: %v", err)
-	}
+	})
 
 	// Start HTTP server
 	go func() {
