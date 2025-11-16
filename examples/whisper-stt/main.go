@@ -62,8 +62,13 @@ func main() {
 		log.Fatal("OPENAI_API_KEY environment variable is required")
 	}
 
+	// Create WebRTC server configuration
+	cfg := &server.ServerConfig{
+		RTCUDPPort: 9000,
+	}
+
 	// Create WebRTC server
-	rtcServer := server.NewRTCServer()
+	rtcServer := server.NewRTCServer(cfg)
 
 	// Set up connection handlers
 	rtcServer.OnConnectionCreated = func(conn connection.RTCConnection, ctx context.Context) {
