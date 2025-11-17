@@ -14,6 +14,12 @@ require (
 	github.com/pion/webrtc/v4 v4.0.7
 	github.com/sashabaranov/go-openai v1.36.1
 	github.com/stretchr/testify v1.10.0
+	go.opentelemetry.io/otel v1.24.0
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.24.0
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.24.0
+	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.24.0
+	go.opentelemetry.io/otel/sdk v1.24.0
+	go.opentelemetry.io/otel/trace v1.24.0
 	google.golang.org/genai v0.0.1
 	google.golang.org/grpc v1.68.0
 	google.golang.org/protobuf v1.36.0
