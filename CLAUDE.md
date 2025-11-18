@@ -63,6 +63,11 @@ export OPENAI_API_KEY=your_api_key_here
 # Debug options
 export DUMP_GEMINI_INPUT=true        # Dump Gemini input audio
 export DUMP_PLAYOUT_OUTPUT=true      # Dump playout output audio
+
+# Tracing options
+export TRACE_EXPORTER=stdout         # Tracing exporter: stdout, otlp, none
+export OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317  # OTLP collector endpoint
+export ENVIRONMENT=development       # Environment name for traces
 ```
 
 ## Architecture
@@ -145,6 +150,52 @@ From `.cursor/rules/element-rule.mdc`:
 - `pkg/server`: HTTP server and WebRTC session handling
 - `pkg/audio`: Audio utilities (resampling, playout, dumping)
 - `pkg/tokenizer`: Text tokenization for streaming responses
+- `pkg/trace`: Distributed tracing with OpenTelemetry (see `docs/tracing.md`)
+
+## Distributed Tracing
+
+The framework includes OpenTelemetry-based distributed tracing for monitoring and debugging. See `docs/tracing.md` for comprehensive documentation.
+
+### Quick Start
+
+```go
+import "github.com/realtime-ai/realtime-ai/pkg/trace"
+
+func main() {
+    ctx := context.Background()
+
+    // Initialize tracing
+    cfg := trace.DefaultConfig()
+    if err := trace.Initialize(ctx, cfg); err != nil {
+        log.Fatal(err)
+    }
+    defer trace.Shutdown(ctx)
+
+    // Use instrumentation helpers
+    ctx, span := trace.InstrumentPipelineStart(ctx, "my-pipeline")
+    defer span.End()
+}
+```
+
+### Tracing Features
+
+- **Multiple exporters**: stdout (development), OTLP (production), none (disabled)
+- **Pre-built instrumentation**: Helpers for pipelines, elements, connections, AI operations
+- **Rich context**: Automatic attribute collection for audio/video/connection data
+- **Performance-conscious**: Configurable sampling, async batching, minimal overhead
+- **Production-ready**: Integration with Jaeger, Zipkin, cloud providers
+
+### Example
+
+```bash
+# Run tracing demo
+go run examples/tracing-demo/main.go
+
+# With OTLP exporter (requires collector)
+TRACE_EXPORTER=otlp go run examples/tracing-demo/main.go
+```
+
+See `pkg/trace/README.md` and `docs/tracing.md` for detailed documentation.
 
 ## WebRTC Protocol
 
