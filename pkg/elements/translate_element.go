@@ -3,13 +3,14 @@ package elements
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/shared"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 	"google.golang.org/genai"
 )
@@ -112,7 +113,8 @@ func (e *TranslateElement) Start(ctx context.Context) error {
 	// Initialize the appropriate client
 	var err error
 	if e.config.Provider == "openai" {
-		e.openaiClient = openai.NewClient(option.WithAPIKey(e.config.APIKey))
+		client := openai.NewClient(option.WithAPIKey(e.config.APIKey))
+		e.openaiClient = &client
 	} else if e.config.Provider == "gemini" {
 		e.geminiClient, err = genai.NewClient(ctx, &genai.ClientConfig{
 			APIKey:  e.config.APIKey,
@@ -200,13 +202,12 @@ func (e *TranslateElement) translateWithOpenAI(ctx context.Context, text string)
 		return e.translateWithOpenAIStreaming(ctx, text)
 	}
 
-	// Non-streaming translation
 	params := openai.ChatCompletionNewParams{
-		Messages: openai.F([]openai.ChatCompletionMessageParamUnion{
+		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.SystemMessage(e.config.SystemPrompt),
 			openai.UserMessage(text),
-		}),
-		Model: openai.F(e.config.Model),
+		},
+		Model: shared.ChatModel(e.config.Model),
 	}
 
 	completion, err := e.openaiClient.Chat.Completions.New(ctx, params)
@@ -224,26 +225,27 @@ func (e *TranslateElement) translateWithOpenAI(ctx context.Context, text string)
 // translateWithOpenAIStreaming uses OpenAI streaming API for lower latency
 func (e *TranslateElement) translateWithOpenAIStreaming(ctx context.Context, text string) (string, error) {
 	params := openai.ChatCompletionNewParams{
-		Messages: openai.F([]openai.ChatCompletionMessageParamUnion{
+		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.SystemMessage(e.config.SystemPrompt),
 			openai.UserMessage(text),
-		}),
-		Model: openai.F(e.config.Model),
+		},
+		Model: shared.ChatModel(e.config.Model),
 	}
 
 	stream := e.openaiClient.Chat.Completions.NewStreaming(ctx, params)
 
-	var result string
+	var builder strings.Builder
 	for stream.Next() {
 		chunk := stream.Current()
-		if len(chunk.Choices) > 0 && chunk.Choices[0].Delta.Content != "" {
-			result += chunk.Choices[0].Delta.Content
-
-			// Publish partial result for real-time display
+		if len(chunk.Choices) == 0 {
+			continue
+		}
+		if delta := chunk.Choices[0].Delta.Content; delta != "" {
+			builder.WriteString(delta)
 			e.BaseElement.Bus().Publish(pipeline.Event{
 				Type:      pipeline.EventPartialResult,
 				Timestamp: time.Now(),
-				Payload:   result,
+				Payload:   builder.String(),
 			})
 		}
 	}
@@ -252,72 +254,59 @@ func (e *TranslateElement) translateWithOpenAIStreaming(ctx context.Context, tex
 		return "", err
 	}
 
-	return result, nil
+	return builder.String(), nil
 }
 
 // translateWithGemini uses Gemini API for translation
 func (e *TranslateElement) translateWithGemini(ctx context.Context, text string) (string, error) {
-	model := e.geminiClient.GenerativeModel(e.config.Model)
-	model.SystemInstruction = &genai.Content{
-		Parts: []genai.Part{genai.Text(e.config.SystemPrompt)},
-	}
-
 	if e.config.Streaming {
-		return e.translateWithGeminiStreaming(ctx, model, text)
+		return e.translateWithGeminiStreaming(ctx, text)
 	}
 
-	// Non-streaming translation
-	resp, err := model.GenerateContent(ctx, genai.Text(text))
+	resp, err := e.geminiClient.Models.GenerateContent(
+		ctx,
+		e.config.Model,
+		genai.Text(text),
+		e.geminiRequestConfig(),
+	)
 	if err != nil {
 		return "", err
 	}
 
-	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+	chunk := collectGeminiText(resp)
+	if chunk == "" {
 		return "", fmt.Errorf("no response from Gemini")
 	}
 
-	// Extract text from response
-	var result string
-	for _, part := range resp.Candidates[0].Content.Parts {
-		if txt, ok := part.(genai.Text); ok {
-			result += string(txt)
-		}
-	}
-
-	return result, nil
+	return chunk, nil
 }
 
 // translateWithGeminiStreaming uses Gemini streaming API
-func (e *TranslateElement) translateWithGeminiStreaming(ctx context.Context, model *genai.GenerativeModel, text string) (string, error) {
-	iter := model.GenerateContentStream(ctx, genai.Text(text))
+func (e *TranslateElement) translateWithGeminiStreaming(ctx context.Context, text string) (string, error) {
+	stream := e.geminiClient.Models.GenerateContentStream(
+		ctx,
+		e.config.Model,
+		genai.Text(text),
+		e.geminiRequestConfig(),
+	)
 
-	var result string
-	for {
-		resp, err := iter.Next()
-		if err == io.EOF {
-			break
-		}
+	var builder strings.Builder
+	for resp, err := range stream {
 		if err != nil {
 			return "", err
 		}
 
-		for _, cand := range resp.Candidates {
-			for _, part := range cand.Content.Parts {
-				if txt, ok := part.(genai.Text); ok {
-					result += string(txt)
-
-					// Publish partial result
-					e.BaseElement.Bus().Publish(pipeline.Event{
-						Type:      pipeline.EventPartialResult,
-						Timestamp: time.Now(),
-						Payload:   result,
-					})
-				}
-			}
+		if chunk := collectGeminiText(resp); chunk != "" {
+			builder.WriteString(chunk)
+			e.BaseElement.Bus().Publish(pipeline.Event{
+				Type:      pipeline.EventPartialResult,
+				Timestamp: time.Now(),
+				Payload:   builder.String(),
+			})
 		}
 	}
 
-	return result, nil
+	return builder.String(), nil
 }
 
 // Stop stops the translate element
@@ -328,11 +317,42 @@ func (e *TranslateElement) Stop() error {
 		e.cancel = nil
 	}
 
-	if e.geminiClient != nil {
-		e.geminiClient.Close()
-		e.geminiClient = nil
-	}
+	e.geminiClient = nil
 
 	log.Println("TranslateElement stopped")
 	return nil
+}
+
+func (e *TranslateElement) geminiRequestConfig() *genai.GenerateContentConfig {
+	if e.config.SystemPrompt == "" {
+		return nil
+	}
+	return &genai.GenerateContentConfig{
+		SystemInstruction: &genai.Content{
+			Parts: []*genai.Part{
+				{Text: e.config.SystemPrompt},
+			},
+		},
+	}
+}
+
+func collectGeminiText(resp *genai.GenerateContentResponse) string {
+	if resp == nil {
+		return ""
+	}
+
+	var builder strings.Builder
+	for _, cand := range resp.Candidates {
+		if cand == nil || cand.Content == nil {
+			continue
+		}
+		for _, part := range cand.Content.Parts {
+			if part == nil || part.Text == "" {
+				continue
+			}
+			builder.WriteString(part.Text)
+		}
+	}
+
+	return builder.String()
 }
