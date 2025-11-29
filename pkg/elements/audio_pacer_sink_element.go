@@ -12,12 +12,12 @@ import (
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 )
 
-// PlayoutSinkElement 将音频数据写入播放缓冲区
-type PlayoutSinkElement struct {
+// AudioPacerSinkElement 将音频数据写入音频节奏控制器，实现固定20ms间隔的音频输出
+type AudioPacerSinkElement struct {
 	*pipeline.BaseElement
 
-	playout *audio.PlayoutBuffer
-	dumper  *audio.Dumper
+	pacer  *audio.AudioPacer
+	dumper *audio.Dumper
 
 	encoder *opus.Encoder
 
@@ -25,8 +25,8 @@ type PlayoutSinkElement struct {
 	wg     sync.WaitGroup
 }
 
-func NewPlayoutSinkElement() *PlayoutSinkElement {
-	playout, err := audio.NewPlayoutBuffer()
+func NewAudioPacerSinkElement() *AudioPacerSinkElement {
+	pacer, err := audio.NewAudioPacer()
 	if err != nil {
 		log.Fatal("create audio buffer error: ", err)
 	}
@@ -48,15 +48,15 @@ func NewPlayoutSinkElement() *PlayoutSinkElement {
 	encoder.SetBitrate(50000) // 64 kbps
 	encoder.SetComplexity(10) // 最高质量
 
-	return &PlayoutSinkElement{
-		BaseElement: pipeline.NewBaseElement("playout-sink-element", 100),
-		playout:     playout,
+	return &AudioPacerSinkElement{
+		BaseElement: pipeline.NewBaseElement("audio-pacer-sink-element", 100),
+		pacer:       pacer,
 		dumper:      dumper,
 		encoder:     encoder,
 	}
 }
 
-func (e *PlayoutSinkElement) Start(ctx context.Context) error {
+func (e *AudioPacerSinkElement) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	e.cancel = cancel
 
@@ -68,16 +68,16 @@ func (e *PlayoutSinkElement) Start(ctx context.Context) error {
 	return nil
 }
 
-func (e *PlayoutSinkElement) Stop() error {
+func (e *AudioPacerSinkElement) Stop() error {
 	if e.cancel != nil {
 		e.cancel()
 		e.wg.Wait()
 		e.cancel = nil
 	}
 
-	if e.playout != nil {
-		e.playout.Close()
-		e.playout = nil
+	if e.pacer != nil {
+		e.pacer.Close()
+		e.pacer = nil
 	}
 
 	if e.dumper != nil {
@@ -88,7 +88,7 @@ func (e *PlayoutSinkElement) Stop() error {
 	return nil
 }
 
-func (e *PlayoutSinkElement) run(ctx context.Context) {
+func (e *AudioPacerSinkElement) run(ctx context.Context) {
 	// 启动读取输入的协程
 	go func() {
 		defer e.wg.Done()
@@ -116,9 +116,9 @@ func (e *PlayoutSinkElement) run(ctx context.Context) {
 					}
 				}
 
-				// 写入播放缓冲区
-				if err := e.playout.Write(msg.AudioData.Data); err != nil {
-					log.Printf("Failed to write to playout buffer: %v", err)
+				// 写入音频节奏控制器
+				if err := e.pacer.Write(msg.AudioData.Data); err != nil {
+					log.Printf("Failed to write to audio pacer: %v", err)
 				}
 			}
 		}
@@ -138,12 +138,12 @@ func (e *PlayoutSinkElement) run(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				// 从播放缓冲区读取一帧数据
+				// 从音频节奏控制器读取一帧数据
 				if time.Since(lastSendTime) >= 20*time.Millisecond {
 
 					lastSendTime = lastSendTime.Add(20 * time.Millisecond)
 
-					audioData := e.playout.ReadFrame()
+					audioData := e.pacer.ReadFrame()
 
 					msg := &pipeline.PipelineMessage{
 						Type: pipeline.MsgTypeAudio,
@@ -159,7 +159,7 @@ func (e *PlayoutSinkElement) run(ctx context.Context) {
 					select {
 					case e.BaseElement.OutChan <- msg:
 					default:
-						log.Println("playout sink element out chan is full")
+						log.Println("audio pacer sink element out chan is full")
 					}
 
 				}
@@ -169,7 +169,7 @@ func (e *PlayoutSinkElement) run(ctx context.Context) {
 }
 
 // 监听打断事件
-func (e *PlayoutSinkElement) listenEvent(ctx context.Context) {
+func (e *AudioPacerSinkElement) listenEvent(ctx context.Context) {
 
 	ch := make(chan pipeline.Event, 5)
 
@@ -182,7 +182,7 @@ func (e *PlayoutSinkElement) listenEvent(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case event := <-ch:
-			log.Println("PlayoutSinkElement listenEvent", event)
+			log.Println("AudioPacerSinkElement listenEvent", event)
 		}
 	}
 }

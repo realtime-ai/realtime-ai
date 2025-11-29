@@ -41,7 +41,7 @@
 - **文件**: [`examples/grpc-assis/server.go`](../examples/grpc-assis/server.go)
 - **功能**:
   - 启动 gRPC 服务器（端口 50051）
-  - 创建 Pipeline: `AudioResample → Gemini → Playout`
+  - 创建 Pipeline: `AudioResample → Gemini → AudioPacer`
   - 处理客户端连接和消息
   - 优雅关闭支持
 

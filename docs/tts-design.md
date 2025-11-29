@@ -111,15 +111,15 @@ ttsElement := elements.NewUniversalTTSElement(openaiProvider)
 ttsElement.SetVoice("alloy")
 
 // Add other elements
-playoutElement := elements.NewPlayoutSinkElement()
+audioPacerElement := elements.NewAudioPacerSinkElement()
 
 // Link elements
-pipeline.AddElements([]Element{ttsElement, playoutElement})
-pipeline.Link(ttsElement, playoutElement)
+pipeline.AddElements([]Element{ttsElement, audioPacerElement})
+pipeline.Link(ttsElement, audioPacerElement)
 
 // Start pipeline
 ttsElement.Start(ctx)
-playoutElement.Start(ctx)
+audioPacerElement.Start(ctx)
 
 // Send text
 msg := &pipeline.PipelineMessage{

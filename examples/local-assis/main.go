@@ -54,13 +54,13 @@ func main() {
 
 	p := pipeline.NewPipeline("local-assis")
 
-	playoutSinkElement := elements.NewPlayoutSinkElement()
+	audioPacerSinkElement := elements.NewAudioPacerSinkElement()
 	geminiElement := elements.NewGeminiElement()
 
 	p.AddElement(geminiElement)
-	p.AddElement(playoutSinkElement)
+	p.AddElement(audioPacerSinkElement)
 
-	p.Link(geminiElement, playoutSinkElement)
+	p.Link(geminiElement, audioPacerSinkElement)
 
 	eventHandler.pipeline = p
 
@@ -68,9 +68,9 @@ func main() {
 
 	// 创建音频 dumper
 	var dumper *audio.Dumper
-	if os.Getenv("DUMP_PLAYOUT_OUTPUT") == "true" {
+	if os.Getenv("DUMP_PACER_OUTPUT") == "true" {
 		var err error
-		dumper, err = audio.NewDumper("playout_output", 48000, 1) // 使用48kHz采样率，单声道
+		dumper, err = audio.NewDumper("pacer_output", 48000, 1) // 使用48kHz采样率，单声道
 		if err != nil {
 			log.Printf("create audio dumper error: %v", err)
 		} else {

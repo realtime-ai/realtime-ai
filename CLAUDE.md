@@ -77,7 +77,7 @@ export AZURE_SPEECH_REGION=your_region
 
 # Debug options
 export DUMP_GEMINI_INPUT=true        # Dump Gemini input audio
-export DUMP_PLAYOUT_OUTPUT=true      # Dump playout output audio
+export DUMP_PACER_OUTPUT=true        # Dump audio pacer output audio
 
 # Tracing options
 export TRACE_EXPORTER=stdout         # Tracing exporter: stdout, otlp, none
@@ -142,11 +142,11 @@ func main() {
     // Add elements
     resample := elements.NewAudioResampleElement(16000, 1)
     gemini := elements.NewGeminiElement(os.Getenv("GOOGLE_API_KEY"))
-    playout := elements.NewPlayoutSinkElement()
+    audioPacer := elements.NewAudioPacerSinkElement()
 
     // Link elements
     p.Link(resample, gemini)
-    p.Link(gemini, playout)
+    p.Link(gemini, audioPacer)
 
     // Start pipeline
     p.Start(ctx)
@@ -164,7 +164,7 @@ func main() {
 
 **Pattern 1: WebRTC Voice Assistant**
 ```
-Browser → WebRTC → AudioResample → Gemini/OpenAI → Playout
+Browser → WebRTC → AudioResample → Gemini/OpenAI → AudioPacer
 ```
 
 **Pattern 2: Translation with Transcription**
@@ -250,7 +250,7 @@ The core of the framework is a **Pipeline** that connects multiple **Elements** 
   - `OpusDecodeElement`: Opus audio decoding
   - `OpusEncodeElement`: Opus audio encoding
   - `AudioResampleElement`: Audio resampling and format conversion
-  - `PlayoutSinkElement`: Audio playback sink
+  - `AudioPacerSinkElement`: Audio pacing sink
 - **Voice Activity Detection**:
   - `SileroVADElement`: Silero VAD with passthrough/filter modes (optional, requires `-tags vad`)
 
@@ -279,7 +279,7 @@ The core of the framework is a **Pipeline** that connects multiple **Elements** 
 
 1. Client connects to server via HTTP POST to `/session` with SDP offer
 2. Server creates `RTCConnection` and registers `ConnectionEventHandler`
-3. On connection, handler creates a `Pipeline` with elements (e.g., resample → gemini → playout)
+3. On connection, handler creates a `Pipeline` with elements (e.g., resample → gemini → audiopacer)
 4. Elements are linked: `Pipeline.Link(element1, element2)`
 5. Pipeline started: `Pipeline.Start(ctx)`
 6. Audio flows: `conn` → `Pipeline.Push()` → elements → `Pipeline.Pull()` → `conn.SendMessage()`
@@ -314,7 +314,7 @@ From `.cursor/rules/element-rule.mdc`:
   - Supports custom provider implementations
 
 ### Utilities
-- `pkg/audio`: Audio utilities (resampling, playout, dumping)
+- `pkg/audio`: Audio utilities (resampling, audio pacing, dumping)
 - `pkg/tokenizer`: Text tokenization for streaming responses
 - `pkg/utils`: Common utilities (audio format conversions)
 - `pkg/proto`: Protocol Buffer definitions for gRPC services

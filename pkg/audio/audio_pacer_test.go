@@ -7,13 +7,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPlayoutBuffer(t *testing.T) {
-	pb, err := NewPlayoutBuffer()
+func TestAudioPacer(t *testing.T) {
+	ap, err := NewAudioPacer()
 	require.NoError(t, err)
-	defer pb.Close()
+	defer ap.Close()
 
 	t.Run("Empty buffer returns silence", func(t *testing.T) {
-		frame := pb.ReadFrame()
+		frame := ap.ReadFrame()
 		assert.Equal(t, BytesPerFrame48kHz, len(frame))
 		// 验证是否为静音（全0）
 		for _, b := range frame {
@@ -28,11 +28,11 @@ func TestPlayoutBuffer(t *testing.T) {
 			testData[i] = byte(i % 256)
 		}
 
-		err := pb.Write(testData)
+		err := ap.Write(testData)
 		require.NoError(t, err)
 
 		// 读取重采样后的48kHz数据
-		frame := pb.ReadFrame()
+		frame := ap.ReadFrame()
 		assert.Equal(t, BytesPerFrame48kHz, len(frame))
 		// 由于经过重采样，我们不能直接比较数据内容
 		// 但可以验证不是静音数据
@@ -54,10 +54,10 @@ func TestPlayoutBuffer(t *testing.T) {
 			testData[i] = byte(i % 256)
 		}
 
-		err := pb.Write(testData)
+		err := ap.Write(testData)
 		require.NoError(t, err)
 
-		frame := pb.ReadFrame()
+		frame := ap.ReadFrame()
 		assert.Equal(t, BytesPerFrame48kHz, len(frame))
 		// 验证输出不全是静音
 		hasNonZero := false
@@ -77,12 +77,12 @@ func TestPlayoutBuffer(t *testing.T) {
 			testData[i] = byte(i % 256)
 		}
 
-		err := pb.Write(testData)
+		err := ap.Write(testData)
 		require.NoError(t, err)
 
 		// 读取三帧48kHz数据
 		for i := 0; i < 3; i++ {
-			frame := pb.ReadFrame()
+			frame := ap.ReadFrame()
 			assert.Equal(t, BytesPerFrame48kHz, len(frame))
 			// 验证不是静音
 			hasNonZero := false
@@ -96,7 +96,7 @@ func TestPlayoutBuffer(t *testing.T) {
 		}
 
 		// 第四帧应该是静音
-		frame := pb.ReadFrame()
+		frame := ap.ReadFrame()
 		for _, b := range frame {
 			assert.Equal(t, byte(0), b)
 		}
@@ -108,15 +108,15 @@ func TestPlayoutBuffer(t *testing.T) {
 		for i := range testData {
 			testData[i] = byte(i % 256)
 		}
-		err := pb.Write(testData)
+		err := ap.Write(testData)
 		require.NoError(t, err)
 
 		// 清空缓冲区
-		pb.Clear()
-		assert.Equal(t, 0, pb.Available())
+		ap.Clear()
+		assert.Equal(t, 0, ap.Available())
 
 		// 验证读取返回静音
-		frame := pb.ReadFrame()
+		frame := ap.ReadFrame()
 		assert.Equal(t, BytesPerFrame48kHz, len(frame))
 		for _, b := range frame {
 			assert.Equal(t, byte(0), b)
@@ -124,7 +124,7 @@ func TestPlayoutBuffer(t *testing.T) {
 	})
 
 	t.Run("Write empty data", func(t *testing.T) {
-		err := pb.Write([]byte{})
+		err := ap.Write([]byte{})
 		assert.NoError(t, err)
 	})
 }

@@ -71,10 +71,10 @@ pipeline := pipeline.NewPipeline("assistant")
 // Add and link elements
 resample := elements.NewAudioResampleElement("resample")
 gemini := elements.NewGeminiElement("gemini", apiKey)
-playout := elements.NewPlayoutSinkElement("playout")
+audioPacer := elements.NewAudioPacerSinkElement("audioPacer")
 
 pipeline.Link(resample, gemini)
-pipeline.Link(gemini, playout)
+pipeline.Link(gemini, audioPacer)
 
 // Start processing
 pipeline.Start(ctx)

@@ -31,7 +31,7 @@ func (c *connectionEventHandler) OnConnectionStateChange(state webrtc.PeerConnec
 
 	if state == webrtc.PeerConnectionStateConnected {
 
-		playoutSinkElement := elements.NewPlayoutSinkElement()
+		audioPacerSinkElement := elements.NewAudioPacerSinkElement()
 		geminiElement := elements.NewGeminiElement()
 		audioResampleElement := elements.NewAudioResampleElement(48000, 16000, 1, 1)
 
@@ -39,14 +39,14 @@ func (c *connectionEventHandler) OnConnectionStateChange(state webrtc.PeerConnec
 		elements := []pipeline.Element{
 			audioResampleElement,
 			geminiElement,
-			playoutSinkElement,
+			audioPacerSinkElement,
 		}
 
 		pipeline := pipeline.NewPipeline("rtc_connection")
 		pipeline.AddElements(elements)
 
 		pipeline.Link(audioResampleElement, geminiElement)
-		pipeline.Link(geminiElement, playoutSinkElement)
+		pipeline.Link(geminiElement, audioPacerSinkElement)
 
 		c.pipeline = pipeline
 
