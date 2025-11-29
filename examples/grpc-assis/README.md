@@ -9,7 +9,7 @@ Client (Go gRPC Client)
     ↓ gRPC Bidirectional Streaming
 Server (GRPCServer)
     ↓ Pipeline
-AudioResampleElement → GeminiElement → PlayoutSinkElement
+AudioResampleElement → GeminiElement → AudioPacerSinkElement
     ↓
 Google Gemini API
 ```
@@ -96,7 +96,7 @@ Run:
 1. **Server**:
    - Starts a gRPC server on port 50051
    - Waits for client connections
-   - On connection, creates a pipeline: Resample → Gemini → Playout
+   - On connection, creates a pipeline: Resample → Gemini → AudioPacer
    - Processes incoming audio/text and sends responses back
 
 2. **Client**:
@@ -115,7 +115,7 @@ Run:
    → StreamMessage(type=AUDIO, AudioFrame{48kHz, mono, PCM})
    → Server: AudioResampleElement (48kHz → 16kHz)
    → Server: GeminiElement (AI processing)
-   → Server: PlayoutSinkElement
+   → Server: AudioPacerSinkElement
    → StreamMessage response back to client
 
 3. Client sends text message
@@ -153,18 +153,18 @@ Edit `server.go`, modify the `OnConnectionStateChange` handler:
 vadElement := elements.NewVADElement()
 audioResampleElement := elements.NewAudioResampleElement(48000, 16000, 1, 1)
 geminiElement := elements.NewGeminiElement()
-playoutSinkElement := elements.NewPlayoutSinkElement()
+audioPacerSinkElement := elements.NewAudioPacerSinkElement()
 
 elements := []pipeline.Element{
     audioResampleElement,
     vadElement,           // Add VAD
     geminiElement,
-    playoutSinkElement,
+    audioPacerSinkElement,
 }
 
 pipeline.Link(audioResampleElement, vadElement)
 pipeline.Link(vadElement, geminiElement)
-pipeline.Link(geminiElement, playoutSinkElement)
+pipeline.Link(geminiElement, audioPacerSinkElement)
 ```
 
 ### Change the Server Port

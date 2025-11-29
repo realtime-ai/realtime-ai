@@ -59,18 +59,18 @@ func runTracedPipeline(ctx context.Context) error {
 	// Create and add elements
 	resampleElement := elements.NewAudioResampleElement(16000, 1)
 	geminiElement := elements.NewGeminiElement()
-	playoutElement := elements.NewPlayoutSinkElement()
+	audioPacerElement := elements.NewAudioPacerSinkElement()
 
 	p.AddElements([]pipeline.Element{
 		resampleElement,
 		geminiElement,
-		playoutElement,
+		audioPacerElement,
 	})
 
 	// Link elements
 	unlink1 := p.Link(resampleElement, geminiElement)
 	defer unlink1()
-	unlink2 := p.Link(geminiElement, playoutElement)
+	unlink2 := p.Link(geminiElement, audioPacerElement)
 	defer unlink2()
 
 	// Start pipeline with tracing

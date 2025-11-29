@@ -53,7 +53,7 @@ The gRPC implementation provides a simpler, more portable alternative to WebRTC 
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │  Pipeline                                                 │  │
 │  │                                                           │  │
-│  │  AudioResampleElement → GeminiElement → PlayoutSinkElement  │
+│  │  AudioResampleElement → GeminiElement → AudioPacerSinkElement│
 │  │         ↓                    ↓                  ↓         │  │
 │  │    48kHz→16kHz          AI Processing      Audio Output   │  │
 │  └──────────────────────────────────────────────────────────┘  │
@@ -157,7 +157,7 @@ Client                          gRPC Server                    Pipeline
   │                                  │────────────────────────────>│
   │                                  │                             │
   │                                  │ Initialize Pipeline         │
-  │                                  │ (Resample→Gemini→Playout)  │
+  │                                  │ (Resample→Gemini→AudioPacer)│
   │                                  │────────────────────────────>│
   │                                  │                             │
   │ ControlMessage(CONNECTED)        │                             │
@@ -345,7 +345,7 @@ grpcServer.OnConnectionCreated(func(ctx context.Context, conn connection.RTCConn
     pipeline.AddElements([]pipeline.Element{
         elements.NewAudioResampleElement(48000, 16000, 1, 1),
         elements.NewGeminiElement(),
-        elements.NewPlayoutSinkElement(),
+        elements.NewAudioPacerSinkElement(),
     })
 
     // Register handler

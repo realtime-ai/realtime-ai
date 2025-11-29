@@ -82,7 +82,7 @@ func main() {
 					audioMsg.AudioData.Channels)
 
 				// Here you could save the audio to a file or send it to another element
-				// For example, you could link it to a PlayoutSinkElement for playback
+				// For example, you could link it to an AudioPacerSinkElement for playback
 			}
 		case <-time.After(10 * time.Second):
 			log.Printf("Timeout waiting for audio output")
