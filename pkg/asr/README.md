@@ -6,9 +6,10 @@ This package provides a unified interface for integrating various ASR (Automatic
 
 The ASR package is designed with extensibility in mind, allowing easy integration of different speech recognition providers:
 
-- **OpenAI Whisper** - Production-ready implementation
-- **Google Cloud Speech** - Future implementation
+- **OpenAI Whisper** - Production-ready implementation (buffered streaming)
+- **Qwen Realtime** - Alibaba Cloud DashScope real-time ASR (true streaming via WebSocket)
 - **Azure Speech Services** - Already integrated (see `azure_stt_element.go`)
+- **Google Cloud Speech** - Future implementation
 - **Other providers** - Easy to add by implementing the `Provider` interface
 
 ## Architecture
@@ -166,9 +167,152 @@ pipeline.Link(vadElement, whisperSTT)
 p.Start(ctx)
 ```
 
+## Qwen Realtime ASR Integration
+
+Qwen Realtime provides true streaming ASR using WebSocket, similar to OpenAI's Realtime API.
+
+### Features
+
+- ✅ True real-time streaming via WebSocket
+- ✅ Partial (interim) and final results
+- ✅ Manual commit mode for VAD integration
+- ✅ Multiple language support (Chinese, English, Japanese, Korean, Cantonese)
+- ✅ Low latency transcription
+- ✅ Connection retry with exponential backoff
+
+### Quick Start
+
+```go
+import (
+    "context"
+    "github.com/realtime-ai/realtime-ai/pkg/asr"
+)
+
+// Create Qwen Realtime provider
+provider, err := asr.NewQwenRealtimeProvider(asr.QwenRealtimeConfig{
+    APIKey: "your-dashscope-api-key",
+    Model:  "qwen3-asr-flash-realtime", // default model
+})
+if err != nil {
+    log.Fatal(err)
+}
+defer provider.Close()
+
+// Configure audio and recognition
+audioConfig := asr.AudioConfig{
+    SampleRate:    16000,
+    Channels:      1,
+    Encoding:      "pcm",
+    BitsPerSample: 16,
+}
+
+recognitionConfig := asr.RecognitionConfig{
+    Language:             "zh",  // or "en", "ja", "ko", "yue", "auto"
+    EnablePartialResults: true,
+}
+
+// Streaming recognition
+recognizer, err := provider.StreamingRecognize(ctx, audioConfig, recognitionConfig)
+if err != nil {
+    log.Fatal(err)
+}
+defer recognizer.Close()
+
+// Send audio chunks
+go func() {
+    for {
+        audioChunk := getNextAudioChunk()
+        recognizer.SendAudio(ctx, audioChunk)
+    }
+}()
+
+// Commit to trigger final transcription (when using manual mode)
+if qr, ok := asr.IsQwenRealtimeRecognizer(recognizer); ok {
+    qr.Commit(ctx)
+}
+
+// Receive results
+for result := range recognizer.Results() {
+    if result.IsFinal {
+        fmt.Printf("Final: %s\n", result.Text)
+    } else {
+        fmt.Printf("Partial: %s\n", result.Text)
+    }
+}
+```
+
+### Using QwenRealtimeSTTElement in Pipeline
+
+```go
+import (
+    "github.com/realtime-ai/realtime-ai/pkg/elements"
+    "github.com/realtime-ai/realtime-ai/pkg/pipeline"
+)
+
+// Create Qwen Realtime STT element
+qwenSTT, err := elements.NewQwenRealtimeSTTElement(elements.QwenRealtimeSTTConfig{
+    APIKey:               "your-dashscope-api-key",
+    Language:             "zh",
+    Model:                "qwen3-asr-flash-realtime",
+    EnablePartialResults: true,
+    VADEnabled:           true,  // Integrate with VAD
+    SampleRate:           16000,
+    Channels:             1,
+    BitsPerSample:        16,
+})
+
+// Create pipeline
+p := pipeline.NewPipeline("qwen-speech-recognition-pipeline")
+
+// Add elements (example with VAD)
+vadElement := elements.NewSileroVADElement(vadConfig)
+audioResample := elements.NewAudioResampleElement(16000, 1)
+
+p.AddElement(audioResample)
+p.AddElement(vadElement)
+p.AddElement(qwenSTT)
+
+// Link elements: audio -> resample -> VAD -> Qwen STT
+pipeline.Link(audioResample, vadElement)
+pipeline.Link(vadElement, qwenSTT)
+
+// Start pipeline
+p.Start(ctx)
+```
+
+### Qwen vs Whisper Comparison
+
+| Feature | Qwen Realtime | OpenAI Whisper |
+|---------|---------------|----------------|
+| Streaming | True WebSocket streaming | Buffered (simulated) |
+| Latency | Lower (real-time) | Higher (batch processing) |
+| Partial Results | Native support | Limited |
+| Languages | zh, en, ja, ko, yue | 99+ languages |
+| Commit Mode | Manual/VAD controlled | Timer-based |
+| API Style | OpenAI Realtime-like | REST API |
+
+### Environment Variables
+
+```bash
+# DashScope API Key
+export DASHSCOPE_API_KEY=sk-...
+
+# For debugging
+export QWEN_DEBUG=true
+```
+
+### Supported Languages
+
+- Chinese (`zh`) - Default
+- English (`en`)
+- Japanese (`ja`)
+- Korean (`ko`)
+- Cantonese (`yue`)
+- Auto-detect (`auto`)
+
 ## VAD Integration
 
-WhisperSTT integrates seamlessly with the SileroVAD element:
+Both WhisperSTT and QwenRealtimeSTT integrate seamlessly with the SileroVAD element:
 
 ### How It Works
 
@@ -373,12 +517,12 @@ Use `"auto"` or empty string for automatic language detection.
 
 ## Future Improvements
 
+- [x] Add Qwen Realtime ASR provider (true streaming)
 - [ ] Add Google Cloud Speech provider
 - [ ] Add AWS Transcribe provider
 - [ ] Support for speaker diarization
 - [ ] Word-level timestamps
 - [ ] Confidence scores (where available)
-- [ ] Real-time streaming (when Whisper supports it)
 - [ ] Custom model fine-tuning support
 
 ## References
@@ -386,6 +530,7 @@ Use `"auto"` or empty string for automatic language detection.
 - [OpenAI Whisper API Documentation](https://platform.openai.com/docs/guides/speech-to-text)
 - [Whisper Model Card](https://github.com/openai/whisper)
 - [Supported Languages](https://github.com/openai/whisper#available-models-and-languages)
+- [Alibaba Cloud DashScope Qwen ASR Realtime](https://help.aliyun.com/zh/model-studio/qwen-asr-realtime-interaction-process)
 
 ## License
 

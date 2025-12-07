@@ -71,6 +71,9 @@ go test ./pkg/pipeline -run TestBus
 export GOOGLE_API_KEY=your_api_key_here
 export OPENAI_API_KEY=your_api_key_here
 
+# Optional: Alibaba Cloud DashScope (for Qwen Realtime ASR)
+export DASHSCOPE_API_KEY=your_dashscope_key
+
 # Optional: Azure services
 export AZURE_SPEECH_KEY=your_azure_key
 export AZURE_SPEECH_REGION=your_region
@@ -387,12 +390,24 @@ type Provider interface {
   - Supports multiple models (whisper-1, etc.)
   - Configurable language detection
   - VAD integration for optimized API usage
+  - Buffered streaming (simulated)
+
+- **Qwen Realtime**: Alibaba Cloud DashScope real-time ASR (`pkg/asr/qwen_realtime.go`)
+  - True streaming via WebSocket (similar to OpenAI Realtime API)
+  - Real-time partial and final transcription results
+  - Manual commit mode for VAD integration
+  - Supports Chinese, English, Japanese, Korean, Cantonese
 
 ### Pipeline Integration
 - **`WhisperSTTElement`**: Pipeline element wrapping Whisper provider
   - Consumes `AudioData` messages
   - Emits `TextData` messages with transcriptions
   - Optionally integrates with `SileroVADElement` to reduce API costs
+
+- **`QwenRealtimeSTTElement`**: Pipeline element wrapping Qwen Realtime provider
+  - True streaming ASR with WebSocket connection
+  - Emits partial and final `TextData` messages
+  - VAD integration with manual commit mode
 
 ### Example Usage
 ```go
@@ -405,6 +420,17 @@ provider := asr.NewWhisperProvider(apiKey, asr.WhisperConfig{
 // Use in pipeline element
 sttElement := elements.NewWhisperSTTElement(provider)
 pipeline.AddElement(sttElement)
+
+// Or create Qwen Realtime provider for true streaming
+qwenProvider, _ := asr.NewQwenRealtimeProvider(asr.QwenRealtimeConfig{
+    APIKey: os.Getenv("DASHSCOPE_API_KEY"),
+    Model:  "qwen3-asr-flash-realtime",
+})
+qwenSTTElement, _ := elements.NewQwenRealtimeSTTElement(elements.QwenRealtimeSTTConfig{
+    APIKey:               os.Getenv("DASHSCOPE_API_KEY"),
+    Language:             "zh",
+    EnablePartialResults: true,
+})
 ```
 
 See `pkg/asr/README.md` for comprehensive documentation and examples.
