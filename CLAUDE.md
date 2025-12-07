@@ -40,6 +40,7 @@ go run examples/openai-realtime/main.go             # OpenAI Realtime API
 go run examples/grpc-assis/server/main.go           # gRPC server
 go run examples/grpc-assis/client/main.go           # gRPC client
 go run examples/whisper-stt/main.go                 # Whisper STT with VAD
+go run examples/qwen-realtime-stt/main.go           # Qwen Realtime STT (true streaming)
 go run examples/translation-demo/main.go            # Real-time transcription + translation
 go run examples/simultaneous-interpretation/main.go # Voice-to-voice interpretation
 go run examples/tracing-demo/main.go                # Distributed tracing demo
