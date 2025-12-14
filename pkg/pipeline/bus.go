@@ -21,7 +21,12 @@ const (
 	EventStopped       EventType = "Stopped"
 	EventVADSpeechStart EventType = "VADSpeechStart"
 	EventVADSpeechEnd   EventType = "VADSpeechEnd"
-	// 可继续扩展更多事件类型...
+
+	// AI Response lifecycle events for Realtime API
+	EventResponseStart EventType = "ResponseStart" // AI starts generating response
+	EventResponseEnd   EventType = "ResponseEnd"   // AI completes response generation
+	EventAudioDelta    EventType = "AudioDelta"    // Audio chunk from AI
+	EventTextDelta     EventType = "TextDelta"     // Text chunk from AI
 )
 
 // Event 代表一条通用事件
@@ -29,6 +34,39 @@ type Event struct {
 	Type      EventType
 	Timestamp time.Time
 	Payload   interface{} // 任意附加数据
+}
+
+// ResponseStartPayload is the payload for EventResponseStart
+type ResponseStartPayload struct {
+	ResponseID string
+}
+
+// ResponseEndPayload is the payload for EventResponseEnd
+type ResponseEndPayload struct {
+	ResponseID string
+	Completed  bool   // true if completed normally, false if interrupted/cancelled
+	Reason     string // "completed", "interrupted", "cancelled", "error"
+}
+
+// AudioDeltaPayload is the payload for EventAudioDelta
+type AudioDeltaPayload struct {
+	ResponseID string
+	Data       []byte
+	SampleRate int
+	Channels   int
+}
+
+// TextDeltaPayload is the payload for EventTextDelta
+type TextDeltaPayload struct {
+	ResponseID string
+	Text       string
+	IsFinal    bool
+}
+
+// VADPayload is the payload for VAD events
+type VADPayload struct {
+	AudioMs int    // Audio position in milliseconds
+	ItemID  string // Associated item ID
 }
 
 // Bus 定义了事件总线的接口

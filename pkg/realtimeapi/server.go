@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
+	"github.com/realtime-ai/realtime-ai/pkg/realtimeapi/bridge"
 	"github.com/realtime-ai/realtime-ai/pkg/realtimeapi/events"
 )
 
@@ -245,6 +246,13 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 		session.SetPipeline(p)
 
+		// Create and start EventBridge for pipeline-to-WebSocket event translation
+		eb := bridge.NewEventBridge(p.Bus(), session, session.ID)
+		session.SetEventBridge(eb)
+		if err := eb.Start(session.Context()); err != nil {
+			log.Printf("Failed to start event bridge: %v", err)
+		}
+
 		// Start pipeline
 		if err := p.Start(session.Context()); err != nil {
 			log.Printf("Failed to start pipeline: %v", err)
@@ -258,7 +266,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Start pipeline output handler
+		// Start pipeline output handler (fallback for elements that don't use bus events)
 		go s.handlePipelineOutput(session)
 	}
 
