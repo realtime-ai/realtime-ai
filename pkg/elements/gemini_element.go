@@ -23,6 +23,10 @@ type GeminiElement struct {
 	sessionID string
 	dumper    *audio.Dumper
 
+	// Response tracking
+	inResponse       bool
+	currentResponseID string
+
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
@@ -124,19 +128,64 @@ func (e *GeminiElement) Start(ctx context.Context) error {
 			for {
 				select {
 				case <-ctx.Done():
+					// If we're in a response, end it
+					if e.inResponse {
+						e.endCurrentResponse("cancelled")
+					}
 					return
 				default:
 					// 从 AI session 接收
 					msg, err := e.session.Receive()
 					if err != nil {
 						log.Println("AI session receive error:", err)
+						// End any active response on error
+						if e.inResponse {
+							e.endCurrentResponse("error")
+						}
 						return
 					}
+
+					// Handle interruption first
+					if msg.ServerContent != nil && msg.ServerContent.Interrupted {
+						log.Println("AI session interrupted")
+						// End current response if any
+						if e.inResponse {
+							e.endCurrentResponse("interrupted")
+						}
+						// Publish interrupt event with proper payload
+						e.BaseElement.Bus().Publish(pipeline.Event{
+							Type:      pipeline.EventInterrupted,
+							Timestamp: time.Now(),
+							Payload: &pipeline.VADPayload{
+								AudioMs: 0,
+								ItemID:  "",
+							},
+						})
+						continue
+					}
+
 					// 假设返回的 PCM 在 msg.ServerContent.ModelTurn.Parts 里
 					if msg.ServerContent != nil && msg.ServerContent.ModelTurn != nil {
 						for _, part := range msg.ServerContent.ModelTurn.Parts {
-							if part.InlineData != nil {
-								// todo: 将 AI 返回的 PCM 数据投递给下一环节
+							if part.InlineData != nil && len(part.InlineData.Data) > 0 {
+								// Start response if not already started
+								if !e.inResponse {
+									e.startNewResponse()
+								}
+
+								// Publish audio delta event to bus
+								e.BaseElement.Bus().Publish(pipeline.Event{
+									Type:      pipeline.EventAudioDelta,
+									Timestamp: time.Now(),
+									Payload: &pipeline.AudioDeltaPayload{
+										ResponseID: e.currentResponseID,
+										Data:       part.InlineData.Data,
+										SampleRate: 24000,
+										Channels:   1,
+									},
+								})
+
+								// 将 AI 返回的 PCM 数据投递给下一环节
 								e.BaseElement.OutChan <- &pipeline.PipelineMessage{
 									Type:      pipeline.MsgTypeAudio,
 									SessionID: e.sessionID,
@@ -153,14 +202,11 @@ func (e *GeminiElement) Start(ctx context.Context) error {
 						}
 					}
 
-					// 如果 AI 返回中断事件，则投递到总线
-					if msg.ServerContent != nil && msg.ServerContent.Interrupted {
-						log.Println("AI session interrupted")
-						e.BaseElement.Bus().Publish(pipeline.Event{
-							Type:      pipeline.EventInterrupted,
-							Timestamp: time.Now(),
-							Payload:   msg,
-						})
+					// Check if turn is complete
+					if msg.ServerContent != nil && msg.ServerContent.TurnComplete {
+						if e.inResponse {
+							e.endCurrentResponse("completed")
+						}
 					}
 				}
 			}
@@ -186,4 +232,58 @@ func (e *GeminiElement) Stop() error {
 	e.session = nil
 	e.sessionID = ""
 	return nil
+}
+
+// startNewResponse starts tracking a new response.
+func (e *GeminiElement) startNewResponse() {
+	e.currentResponseID = generateResponseID()
+	e.inResponse = true
+
+	// Publish response start event
+	e.BaseElement.Bus().Publish(pipeline.Event{
+		Type:      pipeline.EventResponseStart,
+		Timestamp: time.Now(),
+		Payload: &pipeline.ResponseStartPayload{
+			ResponseID: e.currentResponseID,
+		},
+	})
+}
+
+// endCurrentResponse ends the current response.
+func (e *GeminiElement) endCurrentResponse(reason string) {
+	if !e.inResponse {
+		return
+	}
+
+	completed := reason == "completed"
+
+	// Publish response end event
+	e.BaseElement.Bus().Publish(pipeline.Event{
+		Type:      pipeline.EventResponseEnd,
+		Timestamp: time.Now(),
+		Payload: &pipeline.ResponseEndPayload{
+			ResponseID: e.currentResponseID,
+			Completed:  completed,
+			Reason:     reason,
+		},
+	})
+
+	e.inResponse = false
+	e.currentResponseID = ""
+}
+
+// generateResponseID generates a unique response ID.
+func generateResponseID() string {
+	return "resp_" + time.Now().Format("20060102150405") + "_" + randomString(4)
+}
+
+// randomString generates a random string of specified length.
+func randomString(n int) string {
+	const letters = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letters[time.Now().UnixNano()%int64(len(letters))]
+		time.Sleep(time.Nanosecond)
+	}
+	return string(b)
 }

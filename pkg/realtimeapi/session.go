@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
+	"github.com/realtime-ai/realtime-ai/pkg/realtimeapi/bridge"
 	"github.com/realtime-ai/realtime-ai/pkg/realtimeapi/events"
 )
 
@@ -27,6 +28,9 @@ type Session struct {
 
 	// Pipeline for AI processing
 	Pipeline *pipeline.Pipeline
+
+	// EventBridge for pipeline-to-WebSocket event translation
+	EventBridge *bridge.EventBridge
 
 	// WebSocket connection
 	conn *websocket.Conn
@@ -218,6 +222,11 @@ func (s *Session) Close() error {
 	// Wait for goroutines
 	s.wg.Wait()
 
+	// Stop EventBridge if exists
+	if s.EventBridge != nil {
+		s.EventBridge.Stop()
+	}
+
 	// Stop pipeline if exists
 	if s.Pipeline != nil {
 		s.Pipeline.Stop()
@@ -251,6 +260,20 @@ func (s *Session) GetPipeline() *pipeline.Pipeline {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.Pipeline
+}
+
+// SetEventBridge sets the event bridge for this session.
+func (s *Session) SetEventBridge(eb *bridge.EventBridge) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.EventBridge = eb
+}
+
+// GetEventBridge returns the event bridge for this session.
+func (s *Session) GetEventBridge() *bridge.EventBridge {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.EventBridge
 }
 
 // Context returns the session context.
