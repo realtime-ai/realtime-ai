@@ -64,6 +64,15 @@ func TestOpenAITTSProvider_ValidateConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Save and clear OPENAI_API_KEY to ensure test isolation
+			originalKey := os.Getenv("OPENAI_API_KEY")
+			os.Unsetenv("OPENAI_API_KEY")
+			defer func() {
+				if originalKey != "" {
+					os.Setenv("OPENAI_API_KEY", originalKey)
+				}
+			}()
+
 			provider := NewOpenAITTSProvider(tt.apiKey)
 			err := provider.ValidateConfig()
 

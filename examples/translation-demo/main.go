@@ -90,7 +90,7 @@ func main() {
 
 	// Set up connection handlers
 	rtcServer.OnConnectionCreated(func(ctx context.Context, conn connection.RTCConnection) {
-		log.Printf("New connection created: %s", conn.GetConnectionID())
+		log.Printf("New connection created: %s", conn.PeerID())
 
 		// Create event handler
 		eventHandler := &connectionEventHandler{
@@ -172,9 +172,10 @@ func createPipeline(conn connection.RTCConnection, sourceLang, targetLang, trans
 	p := pipeline.NewPipeline("translation-pipeline")
 
 	// 1. Audio Resample Element (ensure 16kHz for Whisper)
-	resampleElement := elements.NewAudioResampleElement(16000, 1)
+	// AudioResampleElement(inputRate, outputRate, inputChannels, outputChannels)
+	resampleElement := elements.NewAudioResampleElement(48000, 16000, 1, 1)
 	p.AddElement(resampleElement)
-	log.Println("Added: AudioResampleElement (16kHz, mono)")
+	log.Println("Added: AudioResampleElement (48kHz → 16kHz, mono)")
 
 	// 2. VAD Element (optional, for optimization)
 	var vadElement pipeline.Element
@@ -186,12 +187,12 @@ func createPipeline(conn connection.RTCConnection, sourceLang, targetLang, trans
 		Mode:            elements.VADModePassthrough, // Passthrough mode
 	}
 
-	vadElement = elements.NewSileroVADElement(vadConfig)
-	if err := vadElement.Init(context.Background()); err != nil {
+	vadElem, err := elements.NewSileroVADElement(vadConfig)
+	if err != nil {
 		log.Printf("VAD not available (build with -tags vad to enable): %v", err)
 		log.Println("Continuing without VAD optimization...")
-		vadElement = nil
 	} else {
+		vadElement = vadElem
 		p.AddElement(vadElement)
 		log.Println("Added: SileroVADElement (Passthrough mode)")
 	}
@@ -262,7 +263,7 @@ func createPipeline(conn connection.RTCConnection, sourceLang, targetLang, trans
 
 // subscribeToEvents subscribes to pipeline events and forwards them to the client
 func subscribeToEvents(p *pipeline.Pipeline, conn connection.RTCConnection) {
-	bus := p.GetBus()
+	bus := p.Bus()
 	if bus == nil {
 		return
 	}
@@ -342,9 +343,7 @@ func sendEventToClient(conn connection.RTCConnection, eventType string, data map
 			TextType: "application/json",
 		},
 	}
-	if err := conn.SendMessage(msg); err != nil {
-		log.Printf("Failed to send event to client: %v", err)
-	}
+	conn.SendMessage(msg)
 }
 
 // handlePipelineOutput processes pipeline output and sends it back to the client
@@ -365,10 +364,7 @@ func handlePipelineOutput(conn connection.RTCConnection, p *pipeline.Pipeline) {
 		}
 
 		// Send message back to client
-		if err := conn.SendMessage(msg); err != nil {
-			log.Printf("Failed to send message: %v", err)
-			break
-		}
+		conn.SendMessage(msg)
 	}
 
 	log.Println("Output handler stopped")

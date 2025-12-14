@@ -75,7 +75,7 @@ func main() {
 
 	// Set up connection handlers
 	rtcServer.OnConnectionCreated(func(ctx context.Context, conn connection.RTCConnection) {
-		log.Printf("New connection created: %s", conn.GetConnectionID())
+		log.Printf("New connection created: %s", conn.PeerID())
 
 		// Create event handler
 		eventHandler := &connectionEventHandler{
@@ -133,9 +133,10 @@ func createPipeline(conn connection.RTCConnection) *pipeline.Pipeline {
 	p := pipeline.NewPipeline("qwen-realtime-stt-pipeline")
 
 	// 1. Audio Resample Element (ensure 16kHz for VAD and Qwen)
-	resampleElement := elements.NewAudioResampleElement(16000, 1)
+	// AudioResampleElement(inputRate, outputRate, inputChannels, outputChannels)
+	resampleElement := elements.NewAudioResampleElement(48000, 16000, 1, 1)
 	p.AddElement(resampleElement)
-	log.Println("Added: AudioResampleElement (16kHz, mono)")
+	log.Println("Added: AudioResampleElement (48kHz → 16kHz, mono)")
 
 	// 2. VAD Element (optional, but recommended for optimization)
 	// Set VAD mode based on build tags
@@ -149,12 +150,12 @@ func createPipeline(conn connection.RTCConnection) *pipeline.Pipeline {
 	}
 
 	// Try to create VAD element (will fail gracefully if not built with vad tag)
-	vadElement = elements.NewSileroVADElement(vadConfig)
-	if err := vadElement.Init(context.Background()); err != nil {
+	vadElem, err := elements.NewSileroVADElement(vadConfig)
+	if err != nil {
 		log.Printf("VAD not available (build with -tags vad to enable): %v", err)
 		log.Println("Continuing without VAD optimization...")
-		vadElement = nil
 	} else {
+		vadElement = vadElem
 		p.AddElement(vadElement)
 		log.Println("Added: SileroVADElement (Passthrough mode, emits events)")
 	}
@@ -204,7 +205,7 @@ func createPipeline(conn connection.RTCConnection) *pipeline.Pipeline {
 
 // subscribeToEvents subscribes to pipeline events for monitoring
 func subscribeToEvents(p *pipeline.Pipeline) {
-	bus := p.GetBus()
+	bus := p.Bus()
 	if bus == nil {
 		return
 	}
@@ -270,10 +271,7 @@ func handlePipelineOutput(conn connection.RTCConnection, p *pipeline.Pipeline) {
 
 		// Send message back to client (if needed)
 		// For STT-only applications, you might send the text data back
-		if err := conn.SendMessage(msg); err != nil {
-			log.Printf("Failed to send message: %v", err)
-			break
-		}
+		conn.SendMessage(msg)
 	}
 
 	log.Println("Output handler stopped")

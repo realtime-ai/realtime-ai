@@ -98,7 +98,7 @@ func main() {
 
 	// Set up connection handlers
 	rtcServer.OnConnectionCreated(func(ctx context.Context, conn connection.RTCConnection) {
-		log.Printf("New connection created: %s", conn.GetConnectionID())
+		log.Printf("New connection created: %s", conn.PeerID())
 
 		// Create event handler
 		eventHandler := &connectionEventHandler{
@@ -200,7 +200,8 @@ func createInterpretationPipeline(
 	// ============================================================
 
 	// 1. Audio Resample Element (ensure 16kHz for Whisper)
-	resample16k := elements.NewAudioResampleElement(16000, 1)
+	// AudioResampleElement(inputRate, outputRate, inputChannels, outputChannels)
+	resample16k := elements.NewAudioResampleElement(48000, 16000, 1, 1)
 	p.AddElement(resample16k)
 	log.Println("  [1] AudioResampleElement (48kHz → 16kHz mono)")
 
@@ -214,11 +215,11 @@ func createInterpretationPipeline(
 		Mode:            elements.VADModePassthrough,
 	}
 
-	vadElement = elements.NewSileroVADElement(vadConfig)
-	if err := vadElement.Init(context.Background()); err != nil {
+	vadElem, err := elements.NewSileroVADElement(vadConfig)
+	if err != nil {
 		log.Printf("  [2] VAD not available (build with -tags vad to enable): %v", err)
-		vadElement = nil
 	} else {
+		vadElement = vadElem
 		p.AddElement(vadElement)
 		log.Println("  [2] SileroVADElement (Voice Activity Detection)")
 	}
@@ -291,12 +292,14 @@ func createInterpretationPipeline(
 	// ============================================================
 
 	// 6. Audio Resample Element (TTS outputs 24kHz, WebRTC needs 48kHz)
-	resample48k := elements.NewAudioResampleElement(48000, 1)
+	// AudioResampleElement(inputRate, outputRate, inputChannels, outputChannels)
+	resample48k := elements.NewAudioResampleElement(24000, 48000, 1, 1)
 	p.AddElement(resample48k)
 	log.Println("  [6] AudioResampleElement (24kHz → 48kHz)")
 
 	// 7. Opus Encode Element (for WebRTC transmission)
-	opusEncode := elements.NewOpusEncodeElement()
+	// NewOpusEncodeElement(bufferSize, sampleRate, channels)
+	opusEncode := elements.NewOpusEncodeElement(960, 48000, 1)
 	p.AddElement(opusEncode)
 	log.Println("  [7] OpusEncodeElement (Audio compression)")
 
@@ -335,7 +338,7 @@ func createInterpretationPipeline(
 
 // subscribeToEvents subscribes to pipeline events and forwards them to the client
 func subscribeToEvents(p *pipeline.Pipeline, conn connection.RTCConnection, enableSubtitles bool) {
-	bus := p.GetBus()
+	bus := p.Bus()
 	if bus == nil {
 		return
 	}
@@ -422,9 +425,7 @@ func sendEventToClient(conn connection.RTCConnection, eventType string, data map
 			TextType: "application/json",
 		},
 	}
-	if err := conn.SendMessage(msg); err != nil {
-		log.Printf("Failed to send event to client: %v", err)
-	}
+	conn.SendMessage(msg)
 }
 
 // handlePipelineOutput processes pipeline output and sends it back to the client
@@ -450,10 +451,7 @@ func handlePipelineOutput(conn connection.RTCConnection, p *pipeline.Pipeline) {
 		}
 
 		// Send message back to client (audio or text)
-		if err := conn.SendMessage(msg); err != nil {
-			log.Printf("Failed to send message: %v", err)
-			break
-		}
+		conn.SendMessage(msg)
 	}
 
 	log.Println("Output handler stopped")
