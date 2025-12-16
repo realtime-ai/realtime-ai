@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Realtime API Demo</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2rem;
+        }
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 30px;
+            font-size: 0.9rem;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .card h2 {
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            color: #4ecdc4;
+        }
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #666;
+        }
+        .status-dot.connected {
+            background: #4ecdc4;
+            box-shadow: 0 0 10px #4ecdc4;
+        }
+        .status-dot.connecting {
+            background: #ffd93d;
+            animation: pulse 1s infinite;
+        }
+        .status-dot.error {
+            background: #ff6b6b;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-right: 10px;
+        }
+        .btn-primary {
+            background: #4ecdc4;
+            color: #1a1a2e;
+        }
+        .btn-primary:hover {
+            background: #45b7aa;
+        }
+        .btn-danger {
+            background: #ff6b6b;
+            color: #fff;
+        }
+        .btn-danger:hover {
+            background: #ff5252;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .events-log {
+            background: #0d0d1a;
+            border-radius: 8px;
+            padding: 15px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+        .event {
+            margin-bottom: 8px;
+            padding: 8px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.03);
+        }
+        .event-type {
+            color: #4ecdc4;
+            font-weight: bold;
+        }
+        .event-client {
+            color: #ffd93d;
+        }
+        .event-server {
+            color: #4ecdc4;
+        }
+        .event-time {
+            color: #666;
+            font-size: 0.75rem;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        audio {
+            width: 100%;
+            margin-top: 15px;
+        }
+        .info {
+            background: rgba(78, 205, 196, 0.1);
+            border: 1px solid rgba(78, 205, 196, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .info p {
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+        .info code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebRTC Realtime API Demo</h1>
+        <p class="subtitle">Audio via RTP | Signaling via DataChannel</p>
+
+        <div class="info">
+            <p><strong>Architecture:</strong></p>
+            <p>• Audio transmitted via WebRTC RTP tracks (Opus 48kHz)</p>
+            <p>• Signaling via WebRTC DataChannel (JSON events)</p>
+            <p>• Compatible with OpenAI Realtime API protocol</p>
+        </div>
+
+        <div class="card">
+            <h2>Connection</h2>
+            <div class="status">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Disconnected</span>
+                <span id="sessionId" style="margin-left: auto; color: #666; font-size: 0.85rem;"></span>
+            </div>
+            <div class="controls">
+                <button class="btn btn-primary" id="connectBtn" onclick="connect()">Connect</button>
+                <button class="btn btn-danger" id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+                <button class="btn btn-primary" id="createResponseBtn" onclick="createResponse()" disabled>Create Response</button>
+            </div>
+            <audio id="remoteAudio" autoplay></audio>
+        </div>
+
+        <div class="card">
+            <h2>Events Log</h2>
+            <div class="events-log" id="eventsLog"></div>
+        </div>
+    </div>
+
+    <script>
+        let pc = null;
+        let dc = null;
+        let localStream = null;
+        let sessionId = null;
+
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const sessionIdEl = document.getElementById('sessionId');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const createResponseBtn = document.getElementById('createResponseBtn');
+        const eventsLog = document.getElementById('eventsLog');
+        const remoteAudio = document.getElementById('remoteAudio');
+
+        function updateStatus(status, text) {
+            statusDot.className = 'status-dot ' + status;
+            statusText.textContent = text;
+        }
+
+        function logEvent(direction, type, data) {
+            const time = new Date().toLocaleTimeString();
+            const dirClass = direction === 'client' ? 'event-client' : 'event-server';
+            const arrow = direction === 'client' ? '→' : '←';
+
+            const eventEl = document.createElement('div');
+            eventEl.className = 'event';
+            eventEl.innerHTML = `
+                <span class="event-time">${time}</span>
+                <span class="${dirClass}">${arrow}</span>
+                <span class="event-type">${type}</span>
+                ${data ? `<pre style="margin-top: 5px; color: #888; font-size: 0.8rem; overflow-x: auto;">${JSON.stringify(data, null, 2)}</pre>` : ''}
+            `;
+            eventsLog.appendChild(eventEl);
+            eventsLog.scrollTop = eventsLog.scrollHeight;
+        }
+
+        async function connect() {
+            try {
+                updateStatus('connecting', 'Connecting...');
+                connectBtn.disabled = true;
+
+                // Get user media
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+
+                // Create RTCPeerConnection
+                pc = new RTCPeerConnection({
+                    iceServers: []
+                });
+
+                // Create DataChannel for Realtime API events
+                dc = pc.createDataChannel('realtime-api', {
+                    ordered: true
+                });
+
+                dc.onopen = () => {
+                    logEvent('client', 'DataChannel opened', null);
+                    // Send session.update after connection
+                    sendEvent({
+                        type: 'session.update',
+                        session: {
+                            modalities: ['text', 'audio'],
+                            voice: 'alloy'
+                        }
+                    });
+                };
+
+                dc.onmessage = (event) => {
+                    const serverEvent = JSON.parse(event.data);
+                    logEvent('server', serverEvent.type, serverEvent);
+                    handleServerEvent(serverEvent);
+                };
+
+                dc.onclose = () => {
+                    logEvent('client', 'DataChannel closed', null);
+                };
+
+                // Handle incoming audio track
+                pc.ontrack = (event) => {
+                    logEvent('server', 'Audio track received', null);
+                    remoteAudio.srcObject = event.streams[0];
+                };
+
+                // Add local audio track
+                const audioTrack = localStream.getAudioTracks()[0];
+                pc.addTrack(audioTrack, localStream);
+
+                // Handle connection state
+                pc.onconnectionstatechange = () => {
+                    logEvent('client', 'Connection state: ' + pc.connectionState, null);
+
+                    if (pc.connectionState === 'connected') {
+                        updateStatus('connected', 'Connected');
+                        disconnectBtn.disabled = false;
+                        createResponseBtn.disabled = false;
+                    } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+                        updateStatus('error', 'Disconnected');
+                        disconnectBtn.disabled = true;
+                        createResponseBtn.disabled = true;
+                    }
+                };
+
+                // Create offer
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                // Wait for ICE gathering
+                await new Promise((resolve) => {
+                    if (pc.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        pc.onicegatheringstatechange = () => {
+                            if (pc.iceGatheringState === 'complete') {
+                                resolve();
+                            }
+                        };
+                    }
+                });
+
+                // Send offer to server
+                const response = await fetch('/session', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(pc.localDescription)
+                });
+
+                if (!response.ok) {
+                    throw new Error('Server returned ' + response.status);
+                }
+
+                const result = await response.json();
+                sessionId = result.session_id;
+                sessionIdEl.textContent = sessionId;
+
+                // Set remote description
+                await pc.setRemoteDescription(result.sdp);
+
+                logEvent('client', 'WebRTC negotiation complete', { sessionId: sessionId });
+
+            } catch (error) {
+                console.error('Connection error:', error);
+                updateStatus('error', 'Error: ' + error.message);
+                connectBtn.disabled = false;
+                logEvent('client', 'Error', { message: error.message });
+            }
+        }
+
+        function disconnect() {
+            if (pc) {
+                pc.close();
+                pc = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            dc = null;
+            sessionId = null;
+            sessionIdEl.textContent = '';
+
+            updateStatus('', 'Disconnected');
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+            createResponseBtn.disabled = true;
+
+            logEvent('client', 'Disconnected', null);
+        }
+
+        function sendEvent(event) {
+            if (dc && dc.readyState === 'open') {
+                const eventWithId = {
+                    event_id: 'evt_' + Math.random().toString(36).substr(2, 8),
+                    ...event
+                };
+                dc.send(JSON.stringify(eventWithId));
+                logEvent('client', event.type, eventWithId);
+            }
+        }
+
+        function createResponse() {
+            sendEvent({
+                type: 'response.create',
+                response: {
+                    modalities: ['audio', 'text']
+                }
+            });
+        }
+
+        function handleServerEvent(event) {
+            switch (event.type) {
+                case 'session.created':
+                    logEvent('server', 'Session created', { id: event.session?.id });
+                    break;
+                case 'session.updated':
+                    logEvent('server', 'Session updated', null);
+                    break;
+                case 'response.created':
+                    logEvent('server', 'Response started', { id: event.response?.id });
+                    break;
+                case 'response.done':
+                    logEvent('server', 'Response completed', { status: event.response?.status });
+                    break;
+                case 'input_audio_buffer.speech_started':
+                    logEvent('server', 'Speech detected', { audio_start_ms: event.audio_start_ms });
+                    break;
+                case 'input_audio_buffer.speech_stopped':
+                    logEvent('server', 'Speech ended', { audio_end_ms: event.audio_end_ms });
+                    break;
+                case 'error':
+                    logEvent('server', 'Error', event.error);
+                    break;
+                // Note: response.audio.delta is NOT received here in RTP mode
+                // Audio comes directly via the RTP track
+            }
+        }
+    </script>
+</body>
+</html>

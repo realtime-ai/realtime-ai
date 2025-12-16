@@ -32,8 +32,14 @@ type Session struct {
 	// EventBridge for pipeline-to-WebSocket event translation
 	EventBridge *bridge.EventBridge
 
-	// WebSocket connection
+	// Transport abstraction (WebSocket or DataChannel)
+	transport Transport
+
+	// Legacy WebSocket connection (for backward compatibility)
 	conn *websocket.Conn
+
+	// Audio mode: true if audio is transmitted via RTP (WebRTC mode)
+	audioViaRTP bool
 
 	// Event channels
 	eventChan chan events.ServerEvent
@@ -87,10 +93,25 @@ func DefaultSessionConfig() SessionConfig {
 }
 
 // NewSession creates a new session with the given WebSocket connection.
+// This is kept for backward compatibility. Use NewSessionWithTransport for new code.
 func NewSession(ctx context.Context, conn *websocket.Conn, config SessionConfig) *Session {
+	session := NewSessionWithTransport(ctx, NewWebSocketTransport(conn), config)
+	session.conn = conn // Keep reference for backward compatibility
+	return session
+}
+
+// NewSessionWithTransport creates a new session with the given transport.
+// Use this for WebRTC-based connections where audio is transmitted via RTP.
+func NewSessionWithTransport(ctx context.Context, transport Transport, config SessionConfig) *Session {
 	sessionID := "sess_" + uuid.New().String()[:12]
 
 	sessionCtx, cancel := context.WithCancel(ctx)
+
+	// Check if transport supports RTP audio
+	audioViaRTP := false
+	if at, ok := transport.(AudioTransport); ok {
+		audioViaRTP = at.SupportsRTPAudio()
+	}
 
 	session := &Session{
 		ID: sessionID,
@@ -114,11 +135,60 @@ func NewSession(ctx context.Context, conn *websocket.Conn, config SessionConfig)
 			Channels:   1,
 			Format:     config.InputAudioFormat,
 		}),
-		conn:      conn,
-		eventChan: make(chan events.ServerEvent, 100),
-		ctx:       sessionCtx,
-		cancel:    cancel,
-		closedCh:  make(chan struct{}),
+		transport:   transport,
+		audioViaRTP: audioViaRTP,
+		eventChan:   make(chan events.ServerEvent, 100),
+		ctx:         sessionCtx,
+		cancel:      cancel,
+		closedCh:    make(chan struct{}),
+	}
+
+	// Start event writer goroutine
+	session.wg.Add(1)
+	go session.writeLoop()
+
+	return session
+}
+
+// NewSessionWithID creates a new session with a specific session ID.
+// Useful for WebRTC connections where session ID is known beforehand.
+func NewSessionWithID(ctx context.Context, sessionID string, transport Transport, config SessionConfig) *Session {
+	sessionCtx, cancel := context.WithCancel(ctx)
+
+	// Check if transport supports RTP audio
+	audioViaRTP := false
+	if at, ok := transport.(AudioTransport); ok {
+		audioViaRTP = at.SupportsRTPAudio()
+	}
+
+	session := &Session{
+		ID: sessionID,
+		Config: events.Session{
+			ID:                sessionID,
+			Object:            "realtime.session",
+			Model:             config.Model,
+			Modalities:        config.Modalities,
+			Voice:             config.Voice,
+			Instructions:      config.Instructions,
+			InputAudioFormat:  config.InputAudioFormat,
+			OutputAudioFormat: config.OutputAudioFormat,
+			TurnDetection:     config.TurnDetection,
+			Temperature:       config.Temperature,
+			MaxOutputTokens:   config.MaxOutputTokens,
+		},
+		Conversation: NewConversation(),
+		AudioBuffer: NewAudioBuffer(AudioBufferConfig{
+			MaxSize:    10 * 1024 * 1024,
+			SampleRate: 24000,
+			Channels:   1,
+			Format:     config.InputAudioFormat,
+		}),
+		transport:   transport,
+		audioViaRTP: audioViaRTP,
+		eventChan:   make(chan events.ServerEvent, 100),
+		ctx:         sessionCtx,
+		cancel:      cancel,
+		closedCh:    make(chan struct{}),
 	}
 
 	// Start event writer goroutine
@@ -281,7 +351,44 @@ func (s *Session) Context() context.Context {
 	return s.ctx
 }
 
-// writeLoop writes events to the WebSocket connection.
+// IsAudioViaRTP returns true if audio is transmitted via RTP (WebRTC mode).
+func (s *Session) IsAudioViaRTP() bool {
+	return s.audioViaRTP
+}
+
+// GetTransport returns the transport for this session.
+func (s *Session) GetTransport() Transport {
+	return s.transport
+}
+
+// GetAudioTransport returns the audio transport if available.
+func (s *Session) GetAudioTransport() AudioTransport {
+	if at, ok := s.transport.(AudioTransport); ok {
+		return at
+	}
+	return nil
+}
+
+// PushAudio pushes PCM audio data directly to the pipeline.
+// This is used for WebRTC mode where audio comes via RTP, not base64-encoded events.
+func (s *Session) PushAudio(data []byte, sampleRate, channels int) {
+	if p := s.GetPipeline(); p != nil {
+		p.Push(&pipeline.PipelineMessage{
+			Type:      pipeline.MsgTypeAudio,
+			SessionID: s.ID,
+			Timestamp: time.Now(),
+			AudioData: &pipeline.AudioData{
+				Data:       data,
+				SampleRate: sampleRate,
+				Channels:   channels,
+				MediaType:  "audio/x-raw",
+				Timestamp:  time.Now(),
+			},
+		})
+	}
+}
+
+// writeLoop writes events to the transport.
 func (s *Session) writeLoop() {
 	defer s.wg.Done()
 
@@ -294,15 +401,24 @@ func (s *Session) writeLoop() {
 				return
 			}
 
-			data, err := json.Marshal(event)
-			if err != nil {
-				log.Printf("[session %s] failed to marshal event: %v", s.ID, err)
-				continue
-			}
+			// Use transport if available, fallback to legacy conn
+			if s.transport != nil {
+				if err := s.transport.SendEvent(event); err != nil {
+					log.Printf("[session %s] failed to send event via transport: %v", s.ID, err)
+					return
+				}
+			} else if s.conn != nil {
+				// Legacy WebSocket path
+				data, err := json.Marshal(event)
+				if err != nil {
+					log.Printf("[session %s] failed to marshal event: %v", s.ID, err)
+					continue
+				}
 
-			if err := s.conn.WriteMessage(websocket.TextMessage, data); err != nil {
-				log.Printf("[session %s] failed to write event: %v", s.ID, err)
-				return
+				if err := s.conn.WriteMessage(websocket.TextMessage, data); err != nil {
+					log.Printf("[session %s] failed to write event: %v", s.ID, err)
+					return
+				}
 			}
 		}
 	}
@@ -373,6 +489,13 @@ func (s *Session) handleSessionUpdate(e *events.SessionUpdateEvent) error {
 }
 
 func (s *Session) handleInputAudioBufferAppend(e *events.InputAudioBufferAppendEvent) error {
+	// In RTP mode, audio comes via RTP track, not via this event.
+	// Skip processing but don't return error for compatibility.
+	if s.audioViaRTP {
+		log.Printf("[session %s] ignoring input_audio_buffer.append in RTP mode", s.ID)
+		return nil
+	}
+
 	if err := s.AudioBuffer.Append(e.Audio); err != nil {
 		return s.SendEvent(events.NewErrorEvent(
 			events.ErrorTypeInvalidRequest,

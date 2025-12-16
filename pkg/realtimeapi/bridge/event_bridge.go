@@ -19,12 +19,25 @@ type EventSender interface {
 	SendEvent(event events.ServerEvent) error
 }
 
+// AudioSink is an interface for sending audio data via RTP.
+// Used in WebRTC mode to send audio directly instead of base64-encoding in events.
+type AudioSink interface {
+	// SendAudio sends PCM audio data via RTP track.
+	SendAudio(data []byte, sampleRate, channels int) error
+
+	// SupportsRTPAudio returns true if audio should be sent via RTP.
+	SupportsRTPAudio() bool
+}
+
 // EventBridge bridges Pipeline Bus events to WebSocket server events.
 type EventBridge struct {
 	bus             pipeline.Bus
 	sender          EventSender
 	tracker         *state.ResponseTracker
 	sessionID       string
+
+	// AudioSink for RTP-based audio output (WebRTC mode)
+	audioSink AudioSink
 
 	// Event channels for subscriptions
 	vadStartCh      chan pipeline.Event
@@ -55,6 +68,19 @@ func NewEventBridge(bus pipeline.Bus, sender EventSender, sessionID string) *Eve
 		audioDeltaCh:    make(chan pipeline.Event, 100),
 		textDeltaCh:     make(chan pipeline.Event, 100),
 	}
+}
+
+// NewEventBridgeWithAudioSink creates a new EventBridge with an AudioSink for RTP audio output.
+// Use this for WebRTC mode where audio should be sent via RTP instead of base64-encoded events.
+func NewEventBridgeWithAudioSink(bus pipeline.Bus, sender EventSender, sessionID string, audioSink AudioSink) *EventBridge {
+	eb := NewEventBridge(bus, sender, sessionID)
+	eb.audioSink = audioSink
+	return eb
+}
+
+// SetAudioSink sets the AudioSink for RTP audio output.
+func (eb *EventBridge) SetAudioSink(sink AudioSink) {
+	eb.audioSink = sink
 }
 
 // Start starts the event bridge.
@@ -272,7 +298,18 @@ func (eb *EventBridge) handleAudioDelta(evt pipeline.Event) {
 	// Track audio data
 	eb.tracker.AddAudioData(payload.Data)
 
-	// Send audio delta event
+	// Route audio based on transport capability
+	if eb.audioSink != nil && eb.audioSink.SupportsRTPAudio() {
+		// RTP mode: send audio directly via RTP track
+		if err := eb.audioSink.SendAudio(payload.Data, payload.SampleRate, payload.Channels); err != nil {
+			log.Printf("[EventBridge] failed to send audio via RTP: %v", err)
+		}
+		// Note: In RTP mode, we still need to track response state for proper event sequencing
+		// but we don't send response.audio.delta events (audio goes via RTP)
+		return
+	}
+
+	// WebSocket mode: send audio delta event with base64-encoded audio
 	audioBase64 := base64.StdEncoding.EncodeToString(payload.Data)
 	eb.sender.SendEvent(events.NewResponseAudioDeltaEvent(
 		ctx.ResponseID,
