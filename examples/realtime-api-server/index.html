@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Realtime API Tester</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #00d4ff;
+        }
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 20px;
+            background: #16213e;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff4757;
+        }
+        .status-dot.connected {
+            background: #2ed573;
+        }
+        .status-text {
+            flex: 1;
+        }
+        .connect-form {
+            display: flex;
+            gap: 10px;
+        }
+        .connect-form input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            background: #0f0f23;
+            color: #eee;
+        }
+        .connect-form select {
+            padding: 8px 12px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            background: #0f0f23;
+            color: #eee;
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        button:hover {
+            transform: translateY(-1px);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-primary {
+            background: #00d4ff;
+            color: #1a1a2e;
+        }
+        .btn-danger {
+            background: #ff4757;
+            color: white;
+        }
+        .btn-secondary {
+            background: #5352ed;
+            color: white;
+        }
+        .main-content {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 20px;
+        }
+        .events-panel {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .events-panel h2 {
+            font-size: 16px;
+            margin-bottom: 15px;
+            color: #00d4ff;
+        }
+        .event-group {
+            margin-bottom: 15px;
+        }
+        .event-group h3 {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #888;
+            margin-bottom: 8px;
+        }
+        .event-btn {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 10px 12px;
+            margin-bottom: 6px;
+            background: #0f0f23;
+            border: 1px solid #333;
+            border-radius: 4px;
+            color: #eee;
+            font-size: 13px;
+        }
+        .event-btn:hover:not(:disabled) {
+            background: #1a1a3e;
+            border-color: #00d4ff;
+        }
+        .event-btn code {
+            color: #ffa502;
+        }
+        .messages-panel {
+            background: #16213e;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 160px);
+        }
+        .messages-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #333;
+        }
+        .messages-header h2 {
+            font-size: 16px;
+            color: #00d4ff;
+        }
+        .messages-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+        }
+        .message.sent {
+            background: #1e3a5f;
+            border-left: 3px solid #00d4ff;
+        }
+        .message.received {
+            background: #1e5f3a;
+            border-left: 3px solid #2ed573;
+        }
+        .message.error {
+            background: #5f1e1e;
+            border-left: 3px solid #ff4757;
+        }
+        .message.system {
+            background: #3a3a5f;
+            border-left: 3px solid #ffa502;
+        }
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            color: #888;
+            font-size: 11px;
+        }
+        .message-type {
+            font-weight: bold;
+        }
+        .message-type.sent { color: #00d4ff; }
+        .message-type.received { color: #2ed573; }
+        .message-type.error { color: #ff4757; }
+        .message-type.system { color: #ffa502; }
+        .message-content {
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .custom-event {
+            padding: 15px;
+            border-top: 1px solid #333;
+        }
+        .custom-event textarea {
+            width: 100%;
+            height: 100px;
+            padding: 10px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            background: #0f0f23;
+            color: #eee;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            resize: vertical;
+            margin-bottom: 10px;
+        }
+        .custom-event-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        @media (max-width: 900px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            .messages-panel {
+                height: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Realtime API Tester</h1>
+
+        <div class="status-bar">
+            <div class="status-dot" id="statusDot"></div>
+            <span class="status-text" id="statusText">Disconnected</span>
+            <div class="connect-form">
+                <input type="text" id="wsUrl" value="ws://localhost:8080/v1/realtime" placeholder="WebSocket URL">
+                <select id="modelSelect">
+                    <option value="echo">echo</option>
+                    <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                    <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+                </select>
+                <button class="btn-primary" id="connectBtn" onclick="toggleConnection()">Connect</button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="events-panel">
+                <h2>Client Events</h2>
+
+                <div class="event-group">
+                    <h3>Session</h3>
+                    <button class="event-btn" onclick="sendEvent('session.update')" id="btn-session.update">
+                        <code>session.update</code> - Update session config
+                    </button>
+                </div>
+
+                <div class="event-group">
+                    <h3>Audio Buffer</h3>
+                    <button class="event-btn" onclick="sendEvent('input_audio_buffer.append')" id="btn-input_audio_buffer.append">
+                        <code>input_audio_buffer.append</code> - Append audio
+                    </button>
+                    <button class="event-btn" onclick="sendEvent('input_audio_buffer.commit')" id="btn-input_audio_buffer.commit">
+                        <code>input_audio_buffer.commit</code> - Commit buffer
+                    </button>
+                    <button class="event-btn" onclick="sendEvent('input_audio_buffer.clear')" id="btn-input_audio_buffer.clear">
+                        <code>input_audio_buffer.clear</code> - Clear buffer
+                    </button>
+                </div>
+
+                <div class="event-group">
+                    <h3>Conversation</h3>
+                    <button class="event-btn" onclick="sendEvent('conversation.item.create')" id="btn-conversation.item.create">
+                        <code>conversation.item.create</code> - Create item
+                    </button>
+                    <button class="event-btn" onclick="sendEvent('conversation.item.delete')" id="btn-conversation.item.delete">
+                        <code>conversation.item.delete</code> - Delete item
+                    </button>
+                </div>
+
+                <div class="event-group">
+                    <h3>Response</h3>
+                    <button class="event-btn" onclick="sendEvent('response.create')" id="btn-response.create">
+                        <code>response.create</code> - Create response
+                    </button>
+                    <button class="event-btn" onclick="sendEvent('response.cancel')" id="btn-response.cancel">
+                        <code>response.cancel</code> - Cancel response
+                    </button>
+                </div>
+            </div>
+
+            <div class="messages-panel">
+                <div class="messages-header">
+                    <h2>Messages</h2>
+                    <button class="btn-secondary" onclick="clearMessages()">Clear</button>
+                </div>
+                <div class="messages-list" id="messagesList"></div>
+                <div class="custom-event">
+                    <textarea id="customEvent" placeholder="Enter custom JSON event...">{
+    "type": "session.update",
+    "session": {
+        "modalities": ["text", "audio"],
+        "voice": "alloy"
+    }
+}</textarea>
+                    <div class="custom-event-buttons">
+                        <button class="btn-primary" onclick="sendCustomEvent()" id="sendCustomBtn">Send Custom Event</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let messageId = 0;
+
+        const eventTemplates = {
+            'session.update': {
+                type: 'session.update',
+                session: {
+                    modalities: ['text', 'audio'],
+                    voice: 'alloy',
+                    instructions: 'You are a helpful assistant.',
+                    turn_detection: {
+                        type: 'server_vad',
+                        threshold: 0.5,
+                        silence_duration_ms: 500
+                    }
+                }
+            },
+            'input_audio_buffer.append': {
+                type: 'input_audio_buffer.append',
+                audio: btoa('sample audio data') // Base64 encoded sample
+            },
+            'input_audio_buffer.commit': {
+                type: 'input_audio_buffer.commit'
+            },
+            'input_audio_buffer.clear': {
+                type: 'input_audio_buffer.clear'
+            },
+            'conversation.item.create': {
+                type: 'conversation.item.create',
+                item: {
+                    type: 'message',
+                    role: 'user',
+                    content: [{
+                        type: 'input_text',
+                        text: 'Hello, how are you?'
+                    }]
+                }
+            },
+            'conversation.item.delete': {
+                type: 'conversation.item.delete',
+                item_id: 'item_placeholder'
+            },
+            'response.create': {
+                type: 'response.create',
+                response: {
+                    modalities: ['text', 'audio'],
+                    instructions: 'Please respond briefly.'
+                }
+            },
+            'response.cancel': {
+                type: 'response.cancel'
+            }
+        };
+
+        function toggleConnection() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            } else {
+                connect();
+            }
+        }
+
+        function connect() {
+            const baseUrl = document.getElementById('wsUrl').value;
+            const model = document.getElementById('modelSelect').value;
+            const url = `${baseUrl}?model=${model}`;
+
+            addMessage('system', 'system', `Connecting to ${url}...`);
+
+            try {
+                ws = new WebSocket(url);
+
+                ws.onopen = () => {
+                    updateStatus(true);
+                    addMessage('system', 'system', 'Connected successfully');
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        addMessage('received', data.type || 'unknown', JSON.stringify(data, null, 2));
+                    } catch (e) {
+                        addMessage('received', 'raw', event.data);
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    addMessage('error', 'error', 'WebSocket error occurred');
+                };
+
+                ws.onclose = (event) => {
+                    updateStatus(false);
+                    addMessage('system', 'system', `Disconnected (code: ${event.code})`);
+                };
+            } catch (e) {
+                addMessage('error', 'error', `Failed to connect: ${e.message}`);
+            }
+        }
+
+        function updateStatus(connected) {
+            const dot = document.getElementById('statusDot');
+            const text = document.getElementById('statusText');
+            const btn = document.getElementById('connectBtn');
+            const eventBtns = document.querySelectorAll('.event-btn');
+            const sendCustomBtn = document.getElementById('sendCustomBtn');
+
+            if (connected) {
+                dot.classList.add('connected');
+                text.textContent = 'Connected';
+                btn.textContent = 'Disconnect';
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-danger');
+                eventBtns.forEach(b => b.disabled = false);
+                sendCustomBtn.disabled = false;
+            } else {
+                dot.classList.remove('connected');
+                text.textContent = 'Disconnected';
+                btn.textContent = 'Connect';
+                btn.classList.remove('btn-danger');
+                btn.classList.add('btn-primary');
+                eventBtns.forEach(b => b.disabled = true);
+                sendCustomBtn.disabled = true;
+            }
+        }
+
+        function sendEvent(eventType) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addMessage('error', 'error', 'Not connected');
+                return;
+            }
+
+            const template = eventTemplates[eventType];
+            if (!template) {
+                addMessage('error', 'error', `Unknown event type: ${eventType}`);
+                return;
+            }
+
+            const event = {
+                ...template,
+                event_id: `evt_${++messageId}`
+            };
+
+            try {
+                ws.send(JSON.stringify(event));
+                addMessage('sent', eventType, JSON.stringify(event, null, 2));
+            } catch (e) {
+                addMessage('error', 'error', `Failed to send: ${e.message}`);
+            }
+        }
+
+        function sendCustomEvent() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addMessage('error', 'error', 'Not connected');
+                return;
+            }
+
+            const textarea = document.getElementById('customEvent');
+            try {
+                const event = JSON.parse(textarea.value);
+                if (!event.event_id) {
+                    event.event_id = `evt_${++messageId}`;
+                }
+                ws.send(JSON.stringify(event));
+                addMessage('sent', event.type || 'custom', JSON.stringify(event, null, 2));
+            } catch (e) {
+                addMessage('error', 'error', `Invalid JSON: ${e.message}`);
+            }
+        }
+
+        function addMessage(type, eventType, content) {
+            const list = document.getElementById('messagesList');
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+
+            const time = new Date().toLocaleTimeString();
+            msg.innerHTML = `
+                <div class="message-header">
+                    <span class="message-type ${type}">${type.toUpperCase()}: ${eventType}</span>
+                    <span>${time}</span>
+                </div>
+                <div class="message-content">${escapeHtml(content)}</div>
+            `;
+
+            list.appendChild(msg);
+            list.scrollTop = list.scrollHeight;
+        }
+
+        function clearMessages() {
+            document.getElementById('messagesList').innerHTML = '';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Initialize buttons as disabled
+        updateStatus(false);
+    </script>
+</body>
+</html>

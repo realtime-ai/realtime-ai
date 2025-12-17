@@ -14,14 +14,20 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 	"github.com/realtime-ai/realtime-ai/pkg/realtimeapi"
 )
+
+//go:embed index.html
+var indexHTML []byte
 
 func main() {
 	// Create server configuration
@@ -42,6 +48,12 @@ func main() {
 	// Set pipeline factory - using echo pipeline for demo
 	server.SetPipelineFactory(createEchoPipeline)
 
+	// Serve frontend page at root
+	server.RegisterHandler("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(indexHTML)
+	})
+
 	// Start server
 	ctx := context.Background()
 	if err := server.Start(ctx); err != nil {
@@ -49,6 +61,7 @@ func main() {
 	}
 
 	log.Printf("Realtime API server running on %s%s", config.Addr, config.Path)
+	log.Printf("Web UI: http://localhost%s", config.Addr)
 	log.Println("Connect with: wscat -c 'ws://localhost:8080/v1/realtime?model=echo'")
 	log.Println("Press Ctrl+C to stop")
 
@@ -58,7 +71,9 @@ func main() {
 	<-sigCh
 
 	log.Println("Shutting down...")
-	if err := server.Stop(ctx); err != nil {
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := server.Stop(shutdownCtx); err != nil {
 		log.Printf("Error during shutdown: %v", err)
 	}
 	log.Println("Server stopped")

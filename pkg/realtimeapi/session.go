@@ -286,11 +286,27 @@ func (s *Session) Close() error {
 	// Cancel context
 	s.cancel()
 
+	// Close transport/WebSocket connection to unblock any blocking reads
+	if s.transport != nil {
+		s.transport.Close()
+	} else if s.conn != nil {
+		s.conn.Close()
+	}
+
 	// Close event channel
 	close(s.eventChan)
 
-	// Wait for goroutines
-	s.wg.Wait()
+	// Wait for goroutines with timeout
+	done := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		log.Printf("[session %s] timeout waiting for goroutines", s.ID)
+	}
 
 	// Stop EventBridge if exists
 	if s.EventBridge != nil {
