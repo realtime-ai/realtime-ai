@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/joho/godotenv"
 	"github.com/realtime-ai/realtime-ai/pkg/elements"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 	"github.com/realtime-ai/realtime-ai/pkg/realtimeapi"
@@ -23,6 +24,9 @@ import (
 )
 
 func main() {
+	// Load environment variables from .env file
+	godotenv.Load()
+
 	// Get API key from environment
 	apiKey := os.Getenv("GOOGLE_API_KEY")
 	if apiKey == "" {
@@ -53,10 +57,10 @@ func main() {
 	http.Handle("/", http.FileServer(http.Dir("examples/webrtc-realtime-api")))
 
 	log.Println("WebRTC Realtime API server started")
-	log.Println("Open http://localhost:8080 in your browser")
+log.Println("Open http://localhost:8081 in your browser")
 	log.Println("UDP port: 9000")
 
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+if err := http.ListenAndServe(":8081", nil); err != nil {
 		log.Fatalf("Failed to start HTTP server: %v", err)
 	}
 }
