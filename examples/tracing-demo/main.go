@@ -10,11 +10,9 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/realtime-ai/realtime-ai/pkg/audio"
 	"github.com/realtime-ai/realtime-ai/pkg/elements"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 	"github.com/realtime-ai/realtime-ai/pkg/trace"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 func main() {
@@ -57,7 +55,8 @@ func runTracedPipeline(ctx context.Context) error {
 	p := pipeline.NewPipeline("gemini-tracing-demo")
 
 	// Create and add elements
-	resampleElement := elements.NewAudioResampleElement(16000, 1)
+	// AudioResampleElement(inputRate, outputRate, inputChannels, outputChannels)
+	resampleElement := elements.NewAudioResampleElement(48000, 16000, 1, 1)
 	geminiElement := elements.NewGeminiElement()
 	audioPacerElement := elements.NewAudioPacerSinkElement()
 
@@ -135,7 +134,7 @@ func runTracedPipeline(ctx context.Context) error {
 	log.Println("\nShutting down...")
 
 	// Stop pipeline with tracing
-	stopCtx, stopSpan := trace.InstrumentPipelineStop(ctx, "gemini-tracing-demo")
+	_, stopSpan := trace.InstrumentPipelineStop(ctx, "gemini-tracing-demo")
 	if err := p.Stop(); err != nil {
 		trace.RecordError(stopSpan, err)
 		stopSpan.End()
@@ -148,35 +147,5 @@ func runTracedPipeline(ctx context.Context) error {
 	// Give time for traces to be exported
 	time.Sleep(2 * time.Second)
 
-	return nil
-}
-
-// demonstrateAudioProcessingTracing shows how to trace audio processing operations
-func demonstrateAudioProcessingTracing(ctx context.Context) error {
-	ctx, span := trace.InstrumentAudioProcessing(ctx, "resample", 48000, 16000)
-	defer span.End()
-
-	// Simulate audio resampling
-	log.Println("Processing audio with tracing...")
-
-	resampler, err := audio.NewResampler(48000, 16000, 1)
-	if err != nil {
-		trace.RecordError(span, err)
-		return err
-	}
-
-	inputData := make([]byte, 9600) // 100ms at 48kHz
-	outputData, err := resampler.Resample(inputData)
-	if err != nil {
-		trace.RecordError(span, err)
-		return err
-	}
-
-	trace.AddEvent(span, "audio.resampled",
-		attribute.Int("input_size", len(inputData)),
-		attribute.Int("output_size", len(outputData)),
-	)
-
-	log.Printf("Audio resampled successfully (trace_id=%s)", trace.TraceID(ctx))
 	return nil
 }

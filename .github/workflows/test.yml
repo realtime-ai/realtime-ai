@@ -101,6 +101,12 @@ jobs:
 
     - name: Run tests
       run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+      env:
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+        DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+        ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4

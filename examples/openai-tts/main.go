@@ -7,12 +7,16 @@ import (
 	"os"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/realtime-ai/realtime-ai/pkg/elements"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 	"github.com/realtime-ai/realtime-ai/pkg/tts"
 )
 
 func main() {
+	// Load environment variables from .env file
+	godotenv.Load()
+
 	// Check for API key
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {

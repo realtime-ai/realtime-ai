@@ -86,6 +86,7 @@ type Server struct {
 
 	// HTTP server
 	httpServer *http.Server
+	mux        *http.ServeMux
 
 	// WebSocket upgrader
 	upgrader websocket.Upgrader
@@ -103,6 +104,7 @@ func NewServer(config ServerConfig) *Server {
 		config:     config,
 		sessions:   make(map[string]*Session),
 		ipSessions: make(map[string]int),
+		mux:        http.NewServeMux(),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  config.ReadBufferSize,
 			WriteBufferSize: config.WriteBufferSize,
@@ -120,14 +122,20 @@ func (s *Server) SetPipelineFactory(factory PipelineFactory) {
 	s.pipelineFactory = factory
 }
 
+// RegisterHandler registers an HTTP handler on the server's mux.
+// Must be called before Start().
+func (s *Server) RegisterHandler(pattern string, handler http.HandlerFunc) {
+	s.mux.HandleFunc(pattern, handler)
+}
+
 // Start starts the server.
 func (s *Server) Start(ctx context.Context) error {
-	mux := http.NewServeMux()
-	mux.HandleFunc(s.config.Path, s.handleWebSocket)
+	// Register WebSocket handler
+	s.mux.HandleFunc(s.config.Path, s.handleWebSocket)
 
 	s.httpServer = &http.Server{
 		Addr:    s.config.Addr,
-		Handler: mux,
+		Handler: s.mux,
 	}
 
 	log.Printf("Realtime API server starting on %s%s", s.config.Addr, s.config.Path)
