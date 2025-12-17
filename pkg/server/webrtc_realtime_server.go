@@ -108,11 +108,12 @@ func (s *WebRTCRealtimeServer) Start() error {
 	// Set NAT1To1IPs for ICE candidates
 	endpoints := s.config.Endpoint
 	if len(endpoints) == 0 && s.config.ICELite {
-		// Auto-detect local IP for ICE Lite mode
-		if localIP := getLocalIP(); localIP != "" {
-			endpoints = []string{localIP}
-			log.Printf("[WebRTCRealtimeServer] auto-detected local IP: %s", localIP)
+		// For local development, use 127.0.0.1 and local network IP
+		endpoints = []string{"127.0.0.1"}
+		if localIP := getLocalIP(); localIP != "" && localIP != "127.0.0.1" {
+			endpoints = append(endpoints, localIP)
 		}
+		log.Printf("[WebRTCRealtimeServer] using IPs for ICE: %v", endpoints)
 	}
 
 	if len(endpoints) > 0 {
