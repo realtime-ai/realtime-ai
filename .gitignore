@@ -28,3 +28,6 @@ go.work.sum
 *.pcm
 *.wav
 
+# Example binaries
+realtime-api-server
+
