@@ -137,7 +137,16 @@ func (s *WebRTCRealtimeServer) Start() error {
 	udpMux := webrtc.NewICEUDPMux(nil, udpListener)
 	settingEngine.SetICEUDPMux(udpMux)
 
-	s.api = webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
+	// Create MediaEngine with Opus codec support
+	mediaEngine := &webrtc.MediaEngine{}
+	if err := mediaEngine.RegisterDefaultCodecs(); err != nil {
+		return fmt.Errorf("failed to register default codecs: %w", err)
+	}
+
+	s.api = webrtc.NewAPI(
+		webrtc.WithSettingEngine(settingEngine),
+		webrtc.WithMediaEngine(mediaEngine),
+	)
 
 	log.Printf("[WebRTCRealtimeServer] started on UDP port %d", s.config.RTCUDPPort)
 	return nil

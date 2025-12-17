@@ -163,24 +163,20 @@ func (c *webrtcRealtimeConnectionImpl) Start(ctx context.Context) error {
 		})
 	})
 
-	// Create local audio track for sending audio
-	audioTrack, err := webrtc.NewTrackLocalStaticSample(
-		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus},
-		"audio",
-		"realtime-audio-"+c.sessionID,
-	)
+	// Add bidirectional audio transceiver (same pattern as rtc_connection.go)
+	transceiver, err := c.pc.AddTransceiverFromKind(webrtc.RTPCodecTypeAudio, webrtc.RTPTransceiverInit{
+		Direction: webrtc.RTPTransceiverDirectionSendrecv,
+	})
 	if err != nil {
 		return err
 	}
-	c.localAudioTrack = audioTrack
 
-	// Add audio track to peer connection
-	if _, err := c.pc.AddTrack(audioTrack); err != nil {
-		return err
-	}
+	// Get the local audio track from the transceiver sender
+	c.localAudioTrack = transceiver.Sender().Track().(*webrtc.TrackLocalStaticSample)
 
 	// Handle incoming audio track
 	c.pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
+		log.Printf("[webrtc-realtime %s] OnTrack: %v, codec: %v", c.sessionID, track.ID(), track.Codec().MimeType)
 		if track.Kind() == webrtc.RTPCodecTypeAudio {
 			c.mu.Lock()
 			c.remoteAudioTrack = track
