@@ -105,8 +105,18 @@ func (s *WebRTCRealtimeServer) Start() error {
 		settingEngine.SetLite(true)
 	}
 
-	if len(s.config.Endpoint) > 0 {
-		settingEngine.SetNAT1To1IPs(s.config.Endpoint, webrtc.ICECandidateTypeHost)
+	// Set NAT1To1IPs for ICE candidates
+	endpoints := s.config.Endpoint
+	if len(endpoints) == 0 && s.config.ICELite {
+		// Auto-detect local IP for ICE Lite mode
+		if localIP := getLocalIP(); localIP != "" {
+			endpoints = []string{localIP}
+			log.Printf("[WebRTCRealtimeServer] auto-detected local IP: %s", localIP)
+		}
+	}
+
+	if len(endpoints) > 0 {
+		settingEngine.SetNAT1To1IPs(endpoints, webrtc.ICECandidateTypeHost)
 	}
 
 	settingEngine.SetFireOnTrackBeforeFirstRTP(true)
@@ -428,4 +438,16 @@ func (s *audioTransportSink) SendAudio(data []byte, sampleRate, channels int) er
 
 func (s *audioTransportSink) SupportsRTPAudio() bool {
 	return s.transport.SupportsRTPAudio()
+}
+
+// getLocalIP returns the preferred outbound IP of this machine.
+func getLocalIP() string {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	return localAddr.IP.String()
 }
