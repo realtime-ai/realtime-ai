@@ -163,15 +163,21 @@ func (c *webrtcRealtimeConnectionImpl) Start(ctx context.Context) error {
 		})
 	})
 
-	// Add bidirectional audio transceiver
-	transceiver, err := c.pc.AddTransceiverFromKind(webrtc.RTPCodecTypeAudio, webrtc.RTPTransceiverInit{
-		Direction: webrtc.RTPTransceiverDirectionSendrecv,
-	})
+	// Create local audio track for sending audio
+	audioTrack, err := webrtc.NewTrackLocalStaticSample(
+		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus},
+		"audio",
+		"realtime-audio-"+c.sessionID,
+	)
 	if err != nil {
 		return err
 	}
+	c.localAudioTrack = audioTrack
 
-	c.localAudioTrack = transceiver.Sender().Track().(*webrtc.TrackLocalStaticSample)
+	// Add audio track to peer connection
+	if _, err := c.pc.AddTrack(audioTrack); err != nil {
+		return err
+	}
 
 	// Handle incoming audio track
 	c.pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
