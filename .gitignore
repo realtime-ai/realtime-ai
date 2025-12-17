@@ -29,5 +29,5 @@ go.work.sum
 *.wav
 
 # Example binaries
-realtime-api-server
+/realtime-api-server
 

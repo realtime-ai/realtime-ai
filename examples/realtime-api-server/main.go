@@ -22,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 	"github.com/realtime-ai/realtime-ai/pkg/realtimeapi"
 )
@@ -30,6 +31,9 @@ import (
 var indexHTML []byte
 
 func main() {
+	// Load environment variables from .env file
+	godotenv.Load()
+
 	// Create server configuration
 	config := realtimeapi.DefaultServerConfig()
 	config.Addr = ":8080"
