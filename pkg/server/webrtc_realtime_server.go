@@ -105,19 +105,10 @@ func (s *WebRTCRealtimeServer) Start() error {
 		settingEngine.SetLite(true)
 	}
 
-	// Set NAT1To1IPs for ICE candidates
-	endpoints := s.config.Endpoint
-	if len(endpoints) == 0 && s.config.ICELite {
-		// For local development, use 127.0.0.1 and local network IP
-		endpoints = []string{"127.0.0.1"}
-		if localIP := getLocalIP(); localIP != "" && localIP != "127.0.0.1" {
-			endpoints = append(endpoints, localIP)
-		}
-		log.Printf("[WebRTCRealtimeServer] using IPs for ICE: %v", endpoints)
-	}
-
-	if len(endpoints) > 0 {
-		settingEngine.SetNAT1To1IPs(endpoints, webrtc.ICECandidateTypeHost)
+	// Set NAT1To1IPs for ICE candidates (only if explicitly configured)
+	if len(s.config.Endpoint) > 0 {
+		settingEngine.SetNAT1To1IPs(s.config.Endpoint, webrtc.ICECandidateTypeHost)
+		log.Printf("[WebRTCRealtimeServer] using IPs for ICE: %v", s.config.Endpoint)
 	}
 
 	settingEngine.SetFireOnTrackBeforeFirstRTP(true)
@@ -198,6 +189,7 @@ func (s *WebRTCRealtimeServer) HandleNegotiate(w http.ResponseWriter, r *http.Re
 		ICEServers: []webrtc.ICEServer{},
 	})
 	if err != nil {
+		log.Printf("[WebRTCRealtimeServer] Failed to create peer connection: %v", err)
 		s.onConnectionError(ctx, nil, err)
 		http.Error(w, "Failed to create peer connection", http.StatusInternalServerError)
 		return
@@ -206,6 +198,7 @@ func (s *WebRTCRealtimeServer) HandleNegotiate(w http.ResponseWriter, r *http.Re
 	// Create WebRTCRealtimeConnection
 	conn, err := connection.NewWebRTCRealtimeConnection(pc)
 	if err != nil {
+		log.Printf("[WebRTCRealtimeServer] Failed to create connection: %v", err)
 		pc.Close()
 		s.onConnectionError(ctx, nil, err)
 		http.Error(w, "Failed to create connection", http.StatusInternalServerError)
@@ -248,6 +241,7 @@ func (s *WebRTCRealtimeServer) HandleNegotiate(w http.ResponseWriter, r *http.Re
 
 	// Start connection (sets up DataChannel and audio track handlers)
 	if err := conn.Start(ctx); err != nil {
+		log.Printf("[WebRTCRealtimeServer] Failed to start connection: %v", err)
 		session.Close()
 		http.Error(w, "Failed to start connection", http.StatusInternalServerError)
 		return
@@ -258,6 +252,7 @@ func (s *WebRTCRealtimeServer) HandleNegotiate(w http.ResponseWriter, r *http.Re
 
 	// WebRTC negotiation
 	if err := pc.SetRemoteDescription(offer); err != nil {
+		log.Printf("[WebRTCRealtimeServer] Failed to set remote description: %v", err)
 		s.onConnectionError(ctx, conn, err)
 		session.Close()
 		http.Error(w, "Failed to set remote description", http.StatusInternalServerError)
@@ -266,6 +261,7 @@ func (s *WebRTCRealtimeServer) HandleNegotiate(w http.ResponseWriter, r *http.Re
 
 	answer, err := pc.CreateAnswer(nil)
 	if err != nil {
+		log.Printf("[WebRTCRealtimeServer] Failed to create answer: %v", err)
 		s.onConnectionError(ctx, conn, err)
 		session.Close()
 		http.Error(w, "Failed to create answer", http.StatusInternalServerError)
@@ -273,6 +269,7 @@ func (s *WebRTCRealtimeServer) HandleNegotiate(w http.ResponseWriter, r *http.Re
 	}
 
 	if err := pc.SetLocalDescription(answer); err != nil {
+		log.Printf("[WebRTCRealtimeServer] Failed to set local description: %v", err)
 		s.onConnectionError(ctx, conn, err)
 		session.Close()
 		http.Error(w, "Failed to set local description", http.StatusInternalServerError)
@@ -448,16 +445,4 @@ func (s *audioTransportSink) SendAudio(data []byte, sampleRate, channels int) er
 
 func (s *audioTransportSink) SupportsRTPAudio() bool {
 	return s.transport.SupportsRTPAudio()
-}
-
-// getLocalIP returns the preferred outbound IP of this machine.
-func getLocalIP() string {
-	conn, err := net.Dial("udp", "8.8.8.8:80")
-	if err != nil {
-		return ""
-	}
-	defer conn.Close()
-
-	localAddr := conn.LocalAddr().(*net.UDPAddr)
-	return localAddr.IP.String()
 }
