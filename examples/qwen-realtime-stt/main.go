@@ -109,6 +109,9 @@ func main() {
 
 	// Set up HTTP handlers
 	http.HandleFunc("/session", rtcServer.HandleNegotiate)
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "examples/qwen-realtime-stt/index.html")
+	})
 
 	// Start HTTP server in a goroutine
 	go func() {
@@ -170,7 +173,7 @@ func createPipeline(conn connection.Connection) *pipeline.Pipeline {
 		APIKey:               os.Getenv("DASHSCOPE_API_KEY"),
 		Language:             language,
 		Model:                "qwen3-asr-flash-realtime",
-		EnablePartialResults: true,             // Enable real-time partial results
+		EnablePartialResults: true,              // Enable real-time partial results
 		VADEnabled:           vadElement != nil, // Enable VAD integration if VAD is available
 		SampleRate:           16000,
 		Channels:             1,

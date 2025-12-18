@@ -31,10 +31,18 @@ This example demonstrates real-time speech-to-text using Alibaba Cloud DashScope
 
 ## Running the Example
 
-### Without VAD (Standard Build)
+### WebRTC Server Mode (Browser)
 
 ```bash
 go run examples/qwen-realtime-stt/main.go
+```
+
+### Audio File Mode (CLI)
+
+This mode uses the provided `test.m4a` for testing:
+
+```bash
+go run examples/qwen-realtime-stt/test_audio/main.go
 ```
 
 ### With VAD (Requires ONNX Runtime)
