@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
-	"github.com/pion/webrtc/v4"
 	"github.com/realtime-ai/realtime-ai/pkg/audio"
 	"github.com/realtime-ai/realtime-ai/pkg/connection"
 	"github.com/realtime-ai/realtime-ai/pkg/elements"
@@ -17,12 +16,12 @@ import (
 type connectionEventHandler struct {
 	connection.ConnectionEventHandler
 
-	conn connection.RTCConnection
+	conn connection.Connection
 
 	pipeline *pipeline.Pipeline
 }
 
-func (c *connectionEventHandler) OnConnectionStateChange(state webrtc.PeerConnectionState) {
+func (c *connectionEventHandler) OnConnectionStateChange(state connection.ConnectionState) {
 	log.Printf("OnConnectionStateChange: %v", state)
 }
 

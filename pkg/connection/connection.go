@@ -1,52 +1,78 @@
+// Package connection provides abstractions for real-time bidirectional connections.
 package connection
 
 import (
-	"github.com/pion/webrtc/v4"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 )
 
-type ConnectionEventHandler interface {
-	// 连接状态变化
-	OnConnectionStateChange(state webrtc.PeerConnectionState)
+// ConnectionState represents the state of a connection.
+type ConnectionState int
 
-	// 数据回调
+const (
+	// ConnectionStateNew - Initial state, connection not yet started
+	ConnectionStateNew ConnectionState = iota
+	// ConnectionStateConnecting - Connection is being established
+	ConnectionStateConnecting
+	// ConnectionStateConnected - Connection is established and ready
+	ConnectionStateConnected
+	// ConnectionStateDisconnected - Connection temporarily lost (may reconnect)
+	ConnectionStateDisconnected
+	// ConnectionStateFailed - Connection failed permanently
+	ConnectionStateFailed
+	// ConnectionStateClosed - Connection closed by user or server
+	ConnectionStateClosed
+)
+
+func (s ConnectionState) String() string {
+	switch s {
+	case ConnectionStateNew:
+		return "new"
+	case ConnectionStateConnecting:
+		return "connecting"
+	case ConnectionStateConnected:
+		return "connected"
+	case ConnectionStateDisconnected:
+		return "disconnected"
+	case ConnectionStateFailed:
+		return "failed"
+	case ConnectionStateClosed:
+		return "closed"
+	default:
+		return "unknown"
+	}
+}
+
+// ConnectionEventHandler handles connection lifecycle events.
+type ConnectionEventHandler interface {
+	// OnConnectionStateChange is called when the connection state changes.
+	OnConnectionStateChange(state ConnectionState)
+
+	// OnMessage is called when a message is received.
 	OnMessage(msg *pipeline.PipelineMessage)
 
-	// 错误
+	// OnError is called when an error occurs.
 	OnError(err error)
 }
 
-// NoOpConnectionEventHandler 一个空实现，方便不想实现所有方法的场景
+// NoOpConnectionEventHandler is a no-op implementation for convenience.
 type NoOpConnectionEventHandler struct{}
 
-// 连接状态变化
-func (h *NoOpConnectionEventHandler) OnConnectionStateChange(state webrtc.PeerConnectionState) {
-}
+func (h *NoOpConnectionEventHandler) OnConnectionStateChange(state ConnectionState) {}
+func (h *NoOpConnectionEventHandler) OnMessage(msg *pipeline.PipelineMessage)       {}
+func (h *NoOpConnectionEventHandler) OnError(err error)                             {}
 
-// 错误
-func (h *NoOpConnectionEventHandler) OnError(err error) {
-}
-
-// 数据回调
-func (h *NoOpConnectionEventHandler) OnMessage(msg *pipeline.PipelineMessage) {
-}
-
-type RTCConnection interface {
-	// PeerID 返回此连接对应的唯一标识
+// Connection represents a bidirectional real-time connection.
+// Implementations include WebRTC and WebSocket transports.
+type Connection interface {
+	// PeerID returns the unique identifier for this connection.
 	PeerID() string
-	// PeerConnection 返回底层的 *webrtc.PeerConnection
-	// RegisterEventHandler 注册事件处理器
+
+	// RegisterEventHandler registers an event handler for connection events.
 	RegisterEventHandler(handler ConnectionEventHandler)
 
-	// SetAudioEncodeParam 设置音频编码参数
-	// SetAudioEncodeParam(sampleRate int, channels int, bitRate int)
-
-	// // SetAudioOutputParam 设置音频输出参数
-	// SetAudioOutputParam(sampleRate int, channels int)
-
-	// SendMessage 发送消息
+	// SendMessage sends a message to the peer.
 	SendMessage(msg *pipeline.PipelineMessage)
 
-	// Close 关闭底层的 PeerConnection (并执行相应清理)
+	// Close closes the connection and releases resources.
 	Close() error
 }

@@ -21,7 +21,7 @@ const (
 	PlaybackDeviceChannels   = 1
 )
 
-var _ RTCConnection = (*localConnectionImpl)(nil)
+var _ Connection = (*localConnectionImpl)(nil)
 
 // LocalConnection 本地连接
 type localConnectionImpl struct {
@@ -47,7 +47,7 @@ type localConnectionImpl struct {
 	playbackDumper *audio.Dumper
 }
 
-func NewLocalConnection(peerID string) (RTCConnection, error) {
+func NewLocalConnection(peerID string) (Connection, error) {
 	ctx, err := malgo.InitContext(nil, malgo.ContextConfig{}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize context: %v", err)
@@ -86,14 +86,6 @@ func (l *localConnectionImpl) PeerID() string {
 
 func (l *localConnectionImpl) RegisterEventHandler(handler ConnectionEventHandler) {
 	l.handler = handler
-}
-
-func (l *localConnectionImpl) In() chan<- *pipeline.PipelineMessage {
-	return l.inChan
-}
-
-func (l *localConnectionImpl) Out() <-chan *pipeline.PipelineMessage {
-	return l.outChan
 }
 
 func (l *localConnectionImpl) Start(ctx context.Context) error {
@@ -302,6 +294,3 @@ func (l *localConnectionImpl) Close() error {
 
 	return nil
 }
-
-func (l *localConnectionImpl) SetAudioEncodeParam(sampleRate int, channels int, bitRate int) {}
-func (l *localConnectionImpl) SetAudioOutputParam(sampleRate int, channels int)              {}

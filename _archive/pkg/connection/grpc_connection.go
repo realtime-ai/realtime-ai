@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pion/webrtc/v4"
 	pb "github.com/realtime-ai/realtime-ai/pkg/proto/streamingai/v1"
 
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
@@ -32,16 +31,16 @@ type grpcConnectionImpl struct {
 	once   sync.Once
 
 	// Connection state
-	state webrtc.PeerConnectionState
+	state ConnectionState
 }
 
-var _ RTCConnection = (*grpcConnectionImpl)(nil)
+var _ Connection = (*grpcConnectionImpl)(nil)
 
-// NewGRPCConnection creates a new gRPC-based connection that implements RTCConnection interface
+// NewGRPCConnection creates a new gRPC-based connection that implements Connection interface.
 func NewGRPCConnection(
 	peerID string,
 	stream pb.StreamingAIService_BiDirectionalStreamingServer,
-) RTCConnection {
+) Connection {
 
 	ctx, cancel := context.WithCancel(stream.Context())
 
@@ -53,7 +52,7 @@ func NewGRPCConnection(
 		outChan: make(chan *pipeline.PipelineMessage, 50),
 		ctx:     ctx,
 		cancel:  cancel,
-		state:   webrtc.PeerConnectionStateNew,
+		state:   ConnectionStateNew,
 	}
 
 	return conn
@@ -71,7 +70,7 @@ func (c *grpcConnectionImpl) RegisterEventHandler(handler ConnectionEventHandler
 	go c.receiveLoop()
 
 	// Notify connection is ready
-	c.state = webrtc.PeerConnectionStateConnected
+	c.state = ConnectionStateConnected
 	c.handler.OnConnectionStateChange(c.state)
 }
 
@@ -89,7 +88,7 @@ func (c *grpcConnectionImpl) Close() error {
 	c.once.Do(func() {
 		log.Printf("[GRPCConnection] Closing connection: %s", c.peerID)
 
-		c.state = webrtc.PeerConnectionStateClosed
+		c.state = ConnectionStateClosed
 		c.handler.OnConnectionStateChange(c.state)
 
 		c.cancel()
@@ -115,7 +114,7 @@ func (c *grpcConnectionImpl) receiveLoop() {
 			pbMsg, err := c.stream.Recv()
 			if err != nil {
 				log.Printf("[GRPCConnection] Stream receive error: %v", err)
-				c.state = webrtc.PeerConnectionStateFailed
+				c.state = ConnectionStateFailed
 				c.handler.OnConnectionStateChange(c.state)
 				c.handler.OnError(err)
 				return
@@ -259,17 +258,17 @@ func (c *grpcConnectionImpl) protoToPipelineMessage(pbMsg *pb.StreamMessage) *pi
 	return msg
 }
 
-// handleStateChange processes connection state change messages
+// handleStateChange processes connection state change messages.
 func (c *grpcConnectionImpl) handleStateChange(state pb.ConnectionState) {
 	switch state {
 	case pb.ConnectionState_CONNECTION_STATE_CONNECTING:
-		c.state = webrtc.PeerConnectionStateConnecting
+		c.state = ConnectionStateConnecting
 	case pb.ConnectionState_CONNECTION_STATE_CONNECTED:
-		c.state = webrtc.PeerConnectionStateConnected
+		c.state = ConnectionStateConnected
 	case pb.ConnectionState_CONNECTION_STATE_DISCONNECTED:
-		c.state = webrtc.PeerConnectionStateDisconnected
+		c.state = ConnectionStateDisconnected
 	case pb.ConnectionState_CONNECTION_STATE_FAILED:
-		c.state = webrtc.PeerConnectionStateFailed
+		c.state = ConnectionStateFailed
 	}
 	c.handler.OnConnectionStateChange(c.state)
 }

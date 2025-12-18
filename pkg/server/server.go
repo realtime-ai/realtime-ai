@@ -14,40 +14,40 @@ import (
 	"github.com/realtime-ai/realtime-ai/pkg/connection"
 )
 
-type RTCServer struct {
+type RealtimeServer struct {
 	sync.RWMutex
 
 	config  *ServerConfig
-	peers   map[string]connection.RTCConnection
+	peers   map[string]connection.Connection
 	api     *webrtc.API
 	handler ServerEventHandler
 
-	onConnectionCreated func(ctx context.Context, conn connection.RTCConnection)
-	onConnectionError   func(ctx context.Context, conn connection.RTCConnection, err error)
+	onConnectionCreated func(ctx context.Context, conn connection.Connection)
+	onConnectionError   func(ctx context.Context, conn connection.Connection, err error)
 }
 
-func NewRTCServer(cfg *ServerConfig) *RTCServer {
-	return &RTCServer{
+func NewRealtimeServer(cfg *ServerConfig) *RealtimeServer {
+	return &RealtimeServer{
 		config:              cfg,
-		onConnectionCreated: func(ctx context.Context, conn connection.RTCConnection) {},
-		onConnectionError:   func(ctx context.Context, conn connection.RTCConnection, err error) {},
-		peers:               make(map[string]connection.RTCConnection),
+		onConnectionCreated: func(ctx context.Context, conn connection.Connection) {},
+		onConnectionError:   func(ctx context.Context, conn connection.Connection, err error) {},
+		peers:               make(map[string]connection.Connection),
 	}
 }
 
-func (s *RTCServer) RegisterEventHandler(handler ServerEventHandler) {
+func (s *RealtimeServer) RegisterEventHandler(handler ServerEventHandler) {
 	s.handler = handler
 }
 
-func (s *RTCServer) OnConnectionCreated(f func(ctx context.Context, conn connection.RTCConnection)) {
+func (s *RealtimeServer) OnConnectionCreated(f func(ctx context.Context, conn connection.Connection)) {
 	s.onConnectionCreated = f
 }
 
-func (s *RTCServer) OnConnectionError(f func(ctx context.Context, conn connection.RTCConnection, err error)) {
+func (s *RealtimeServer) OnConnectionError(f func(ctx context.Context, conn connection.Connection, err error)) {
 	s.onConnectionError = f
 }
 
-func (s *RTCServer) Start() error {
+func (s *RealtimeServer) Start() error {
 
 	settingEngine := webrtc.SettingEngine{}
 	if s.config.ICELite {
@@ -87,7 +87,7 @@ func (s *RTCServer) Start() error {
 }
 
 // HandleNegotiate 处理 /session 路由
-func (s *RTCServer) HandleNegotiate(w http.ResponseWriter, r *http.Request) {
+func (s *RealtimeServer) HandleNegotiate(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
@@ -128,30 +128,30 @@ func (s *RTCServer) HandleNegotiate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	peerID := uuid.New().String()
-	rtcConnection := connection.NewRTCConnection(peerID, pc)
+	webrtcConn := connection.NewWebRTCConnection(peerID, pc)
 
 	s.Lock()
-	s.peers[peerID] = rtcConnection
+	s.peers[peerID] = webrtcConn
 	s.Unlock()
 
-	// 通知 Handler： PeerConnection 已经创建
-	s.onConnectionCreated(ctx, rtcConnection)
+	// Notify handler: connection created
+	s.onConnectionCreated(ctx, webrtcConn)
 
-	// 开始协商
+	// Start negotiation
 	if err := pc.SetRemoteDescription(offer); err != nil {
-		s.onConnectionError(ctx, rtcConnection, err)
+		s.onConnectionError(ctx, webrtcConn, err)
 		http.Error(w, "Failed to set remote description", http.StatusInternalServerError)
 		return
 	}
 
 	answer, err := pc.CreateAnswer(nil)
 	if err != nil {
-		s.onConnectionError(ctx, rtcConnection, err)
+		s.onConnectionError(ctx, webrtcConn, err)
 		http.Error(w, "Failed to create answer", http.StatusInternalServerError)
 		return
 	}
 	if err := pc.SetLocalDescription(answer); err != nil {
-		s.onConnectionError(ctx, rtcConnection, err)
+		s.onConnectionError(ctx, webrtcConn, err)
 		http.Error(w, "Failed to set local description", http.StatusInternalServerError)
 		return
 	}

@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"github.com/joho/godotenv"
-	"github.com/pion/webrtc/v4"
 	"github.com/realtime-ai/realtime-ai/pkg/connection"
 	"github.com/realtime-ai/realtime-ai/pkg/elements"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
@@ -20,16 +19,16 @@ var indexHTML []byte
 type connectionEventHandler struct {
 	connection.ConnectionEventHandler
 
-	conn connection.RTCConnection
+	conn connection.Connection
 
 	pipeline *pipeline.Pipeline
 }
 
-func (c *connectionEventHandler) OnConnectionStateChange(state webrtc.PeerConnectionState) {
+func (c *connectionEventHandler) OnConnectionStateChange(state connection.ConnectionState) {
 
 	log.Printf("OnConnectionStateChange: %v \n", state)
 
-	if state == webrtc.PeerConnectionStateConnected {
+	if state == connection.ConnectionStateConnected {
 
 		audioPacerSinkElement := elements.NewAudioPacerSinkElement()
 		geminiElement := elements.NewGeminiElement()
@@ -84,16 +83,16 @@ func StartServer(addr string) error {
 		RTCUDPPort: 9000,
 	}
 
-	rtcServer := server.NewRTCServer(cfg)
+	rtcServer := server.NewRealtimeServer(cfg)
 
-	rtcServer.OnConnectionCreated(func(ctx context.Context, conn connection.RTCConnection) {
+	rtcServer.OnConnectionCreated(func(ctx context.Context, conn connection.Connection) {
 		conn.RegisterEventHandler(&connectionEventHandler{
 			conn: conn,
 		})
 
 	})
 
-	rtcServer.OnConnectionError(func(ctx context.Context, conn connection.RTCConnection, err error) {
+	rtcServer.OnConnectionError(func(ctx context.Context, conn connection.Connection, err error) {
 		log.Printf("OnConnectionError: %s, %v \n", conn.PeerID(), err)
 	})
 
