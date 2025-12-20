@@ -6,10 +6,10 @@ import (
 
 // AudioFormat defines the audio format configuration
 type AudioFormat struct {
-	SampleRate int    // Sample rate in Hz (e.g., 24000, 16000)
-	Channels   int    // Number of audio channels (1 for mono, 2 for stereo)
-	MediaType  string // MIME type (e.g., "audio/pcm", "audio/opus")
-	Encoding   string // Audio encoding format (e.g., "pcm_s16le", "opus")
+	SampleRate int                        // Sample rate in Hz (e.g., 24000, 16000)
+	Channels   int                        // Number of audio channels (1 for mono, 2 for stereo)
+	MediaType  interface{}                // MIME type (AudioMediaType or string for compatibility)
+	Encoding   string                     // Audio encoding format (e.g., "pcm_s16le", "opus")
 }
 
 // SynthesizeRequest represents a request to synthesize speech

@@ -124,7 +124,7 @@ func (e *OpenAIRealtimeAPIElement) Start(ctx context.Context) error {
 				Timestamp: time.Now(),
 				AudioData: &pipeline.AudioData{
 					Data:       data,
-					MediaType:  "audio/x-raw",
+					MediaType:  pipeline.AudioMediaTypeRaw,
 					SampleRate: 24000, // AI 返回的采样率
 					Channels:   1,     // AI 返回的通道数
 					Timestamp:  time.Now(),
@@ -179,7 +179,7 @@ func (e *OpenAIRealtimeAPIElement) Start(ctx context.Context) error {
 
 				if msg.Type == pipeline.MsgTypeAudio {
 
-					if msg.AudioData.MediaType != "audio/x-raw" {
+					if msg.AudioData.MediaType != pipeline.AudioMediaTypeRaw {
 						continue
 					}
 

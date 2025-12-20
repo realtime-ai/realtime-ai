@@ -129,13 +129,23 @@ func (e *UniversalTTSElement) synthesizeAndOutput(ctx context.Context, text stri
 	}
 
 	// Create audio message for the pipeline
+	// Convert MediaType to AudioMediaType
+	var mediaType pipeline.AudioMediaType
+	if amt, ok := resp.AudioFormat.MediaType.(pipeline.AudioMediaType); ok {
+		mediaType = amt
+	} else if str, ok := resp.AudioFormat.MediaType.(string); ok {
+		mediaType = pipeline.AudioMediaType(str)
+	} else {
+		mediaType = pipeline.AudioMediaTypeRaw // default
+	}
+
 	msg := &pipeline.PipelineMessage{
 		Type: pipeline.MsgTypeAudio,
 		AudioData: &pipeline.AudioData{
 			Data:       resp.AudioData,
 			SampleRate: resp.AudioFormat.SampleRate,
 			Channels:   resp.AudioFormat.Channels,
-			MediaType:  resp.AudioFormat.MediaType,
+			MediaType:  mediaType,
 			Timestamp:  time.Now(),
 		},
 	}

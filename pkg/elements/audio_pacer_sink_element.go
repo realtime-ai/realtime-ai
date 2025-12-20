@@ -101,7 +101,7 @@ func (e *AudioPacerSinkElement) run(ctx context.Context) {
 					continue
 				}
 
-				if msg.AudioData.MediaType != "audio/x-raw" {
+				if msg.AudioData.MediaType != pipeline.AudioMediaTypeRaw {
 					continue
 				}
 
@@ -151,7 +151,7 @@ func (e *AudioPacerSinkElement) run(ctx context.Context) {
 							Data:       audioData,
 							SampleRate: 48000,
 							Channels:   1,
-							MediaType:  "audio/x-raw",
+							MediaType:  pipeline.AudioMediaTypeRaw,
 							Timestamp:  time.Now(),
 						},
 					}

@@ -210,7 +210,7 @@ func (e *SileroVADElement) processAudio(ctx context.Context) {
 			}
 
 			// Only process raw PCM audio
-			if msg.AudioData.MediaType != "audio/x-raw" {
+			if msg.AudioData.MediaType != pipeline.AudioMediaTypeRaw {
 				log.Printf("[SileroVAD] Skipping non-raw audio: %s", msg.AudioData.MediaType)
 				continue
 			}

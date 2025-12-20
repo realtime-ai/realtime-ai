@@ -37,7 +37,7 @@ func main() {
 	config := server.DefaultWebRTCRealtimeConfig()
 	config.RTCUDPPort = 9000
 	config.ICELite = false
-	config.DefaultModel = elements.DefaultGeminiModel
+	config.DefaultModel = elements.DefaultGeminiLiveModel
 
 	// Create server
 	srv := server.NewWebRTCRealtimeServer(config)
@@ -66,7 +66,7 @@ func main() {
 }
 
 // createPipeline creates the audio processing pipeline.
-// Audio flow: Input (48kHz) -> Resample (16kHz) -> [Gemini AI] -> Resample (48kHz) -> Output
+// Audio flow: Input (48kHz) -> Resample (16kHz) -> [Gemini AI] -> Resample (48kHz) -> AudioPacer -> Output
 func createPipeline(_ context.Context, session *realtimeapi.Session, apiKey string) (*pipeline.Pipeline, error) {
 	p := pipeline.NewPipeline("gemini-assis-" + session.ID)
 
@@ -77,8 +77,8 @@ func createPipeline(_ context.Context, session *realtimeapi.Session, apiKey stri
 		inputResample := elements.NewAudioResampleElement(48000, 16000, 1, 1)
 
 		// Gemini AI processing with default model
-		gemini := elements.NewGeminiElementWithConfig(elements.GeminiConfig{
-			Model:  elements.DefaultGeminiModel,
+		gemini := elements.NewGeminiLiveElementWithConfig(elements.GeminiLiveConfig{
+			Model:  elements.DefaultGeminiLiveModel,
 			APIKey: apiKey,
 		})
 
@@ -86,12 +86,18 @@ func createPipeline(_ context.Context, session *realtimeapi.Session, apiKey stri
 		// Note: Gemini outputs at 24kHz, we need to resample to 48kHz
 		outputResample := elements.NewAudioResampleElement(24000, 48000, 1, 1)
 
+		// Audio pacer for rate control
+		audioPacer := elements.NewAudioPacerSinkElement()
+
+		print(audioPacer)
+
 		// Add elements
 		p.AddElements([]pipeline.Element{inputResample, gemini, outputResample})
 
 		// Link elements
 		p.Link(inputResample, gemini)
 		p.Link(gemini, outputResample)
+		// p.Link(outputResample, audioPacer)
 
 		log.Printf("[Pipeline] Created Gemini pipeline for session %s (model: %s)", session.ID, elements.DefaultGeminiModel)
 	} else {

@@ -182,7 +182,7 @@ func TestVADElementPassthroughMode(t *testing.T) {
 			Data:       audioData,
 			SampleRate: 16000,
 			Channels:   1,
-			MediaType:  "audio/x-raw",
+			MediaType:  pipeline.AudioMediaTypeRaw,
 			Timestamp:  time.Now(),
 		},
 	}
@@ -233,7 +233,7 @@ func TestVADElementFilterMode(t *testing.T) {
 			Data:       silenceData,
 			SampleRate: 16000,
 			Channels:   1,
-			MediaType:  "audio/x-raw",
+			MediaType:  pipeline.AudioMediaTypeRaw,
 			Timestamp:  time.Now(),
 		},
 	}
@@ -365,7 +365,7 @@ func TestVADElementSampleRateValidation(t *testing.T) {
 			Data:       audioData,
 			SampleRate: 8000, // Wrong sample rate
 			Channels:   1,
-			MediaType:  "audio/x-raw",
+			MediaType:  pipeline.AudioMediaTypeRaw,
 			Timestamp:  time.Now(),
 		},
 	}

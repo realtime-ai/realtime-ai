@@ -397,7 +397,7 @@ func (s *Session) PushAudio(data []byte, sampleRate, channels int) {
 				Data:       data,
 				SampleRate: sampleRate,
 				Channels:   channels,
-				MediaType:  "audio/x-raw",
+				MediaType:  pipeline.AudioMediaTypeRaw,
 				Timestamp:  time.Now(),
 			},
 		})
@@ -533,7 +533,7 @@ func (s *Session) handleInputAudioBufferAppend(e *events.InputAudioBufferAppendE
 					Data:       decoded,
 					SampleRate: s.AudioBuffer.Config().SampleRate,
 					Channels:   s.AudioBuffer.Config().Channels,
-					MediaType:  "audio/x-raw",
+					MediaType:  pipeline.AudioMediaTypeRaw,
 					Timestamp:  time.Now(),
 				},
 			})

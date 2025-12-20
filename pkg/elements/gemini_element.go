@@ -141,7 +141,7 @@ func (e *GeminiLiveElement) Start(ctx context.Context) error {
 				return
 			case msg := <-e.BaseElement.InChan:
 				if msg.Type == pipeline.MsgTypeAudio {
-					if msg.AudioData.MediaType != "audio/x-raw" || len(msg.AudioData.Data) == 0 {
+					if msg.AudioData.MediaType != pipeline.AudioMediaTypeRaw || len(msg.AudioData.Data) == 0 {
 						continue
 					}
 
@@ -150,7 +150,7 @@ func (e *GeminiLiveElement) Start(ctx context.Context) error {
 						liveMsg := genai.LiveClientMessage{
 							RealtimeInput: &genai.LiveClientRealtimeInput{
 								MediaChunks: []*genai.Blob{
-									{Data: msg.AudioData.Data, MIMEType: "audio/pcm"},
+									{Data: msg.AudioData.Data, MIMEType: string(pipeline.AudioMediaTypePCM)},
 								},
 							},
 						}
@@ -255,7 +255,7 @@ func (e *GeminiLiveElement) Start(ctx context.Context) error {
 									Timestamp: time.Now(),
 									AudioData: &pipeline.AudioData{
 										Data:       part.InlineData.Data,
-										MediaType:  "audio/x-raw",
+										MediaType:  pipeline.AudioMediaTypeRaw,
 										SampleRate: 24000, // AI 返回的采样率
 										Channels:   1,     // AI 返回的通道数
 										Timestamp:  time.Now(),

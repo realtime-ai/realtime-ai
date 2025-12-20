@@ -411,6 +411,8 @@ func (h *webrtcRealtimeEventHandler) handlePipelineOutput(ctx context.Context, p
 				return
 			}
 
+			log.Println("pipeline output: ", msg)
+
 			// In RTP mode, audio is handled by EventBridge via AudioSink
 			// This handler is for any additional processing if needed
 		}

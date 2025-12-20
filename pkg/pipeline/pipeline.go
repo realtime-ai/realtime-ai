@@ -13,7 +13,7 @@ type AudioData struct {
 	Data       []byte
 	SampleRate int
 	Channels   int
-	MediaType  string // "audio/x-raw", "audio/x-opus", etc.
+	MediaType  AudioMediaType // pipeline.AudioMediaTypeRaw, pipeline.AudioMediaTypeOpus, etc.
 	Codec      string
 	Timestamp  time.Time
 }
@@ -22,7 +22,7 @@ type VideoData struct {
 	Data           []byte
 	Width          int
 	Height         int
-	MediaType      string
+	MediaType      VideoMediaType
 	Format         string
 	FramerateNum   int
 	FramerateDenom int

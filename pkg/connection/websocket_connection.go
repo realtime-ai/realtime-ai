@@ -49,7 +49,7 @@ type WSAudioPayload struct {
 	Data       string `json:"data"`        // Base64 encoded audio data
 	SampleRate int    `json:"sample_rate"` // Sample rate in Hz
 	Channels   int    `json:"channels"`    // Number of channels
-	MediaType  string `json:"media_type"`  // e.g., "audio/x-raw"
+	MediaType  string `json:"media_type"`  // e.g., pipeline.AudioMediaTypeRaw
 }
 
 type websocketConnection struct {
@@ -200,7 +200,7 @@ func (w *websocketConnection) handleMessage(data []byte) {
 					Data:       audioData,
 					SampleRate: w.sampleRate,
 					Channels:   w.channels,
-					MediaType:  "audio/x-raw",
+					MediaType:  pipeline.AudioMediaTypeRaw,
 					Timestamp:  time.Now(),
 				},
 			}
@@ -223,9 +223,11 @@ func (w *websocketConnection) handleMessage(data []byte) {
 		if channels == 0 {
 			channels = w.channels
 		}
-		mediaType := audioPayload.MediaType
+
+		// Convert string MediaType to AudioMediaType
+		mediaType := pipeline.AudioMediaType(audioPayload.MediaType)
 		if mediaType == "" {
-			mediaType = "audio/x-raw"
+			mediaType = pipeline.AudioMediaTypeRaw
 		}
 
 		msg := &pipeline.PipelineMessage{
@@ -288,12 +290,12 @@ func (w *websocketConnection) writeMessage(msg *pipeline.PipelineMessage) {
 		if msg.AudioData == nil {
 			return
 		}
-		wsMsg.Type = "audio"
+	wsMsg.Type = "audio"
 		payload := WSAudioPayload{
 			Data:       base64.StdEncoding.EncodeToString(msg.AudioData.Data),
 			SampleRate: msg.AudioData.SampleRate,
 			Channels:   msg.AudioData.Channels,
-			MediaType:  msg.AudioData.MediaType,
+			MediaType:  string(msg.AudioData.MediaType),
 		}
 		wsMsg.Payload, _ = json.Marshal(payload)
 

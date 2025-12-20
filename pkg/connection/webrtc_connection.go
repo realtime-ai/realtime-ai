@@ -250,7 +250,7 @@ func (c *webrtcConnection) readRemoteAudio() {
 					Data:       audioData,
 					SampleRate: c.sampleRate,
 					Channels:   c.channels,
-					MediaType:  "audio/x-raw",
+					MediaType:  pipeline.AudioMediaTypeRaw,
 					Timestamp:  time.Now(),
 				},
 			}
@@ -289,7 +289,7 @@ func (c *webrtcConnection) sendTextMessage(msg *pipeline.PipelineMessage) {
 }
 
 func (c *webrtcConnection) sendAudioMessage(msg *pipeline.PipelineMessage) {
-	if msg.AudioData == nil || msg.AudioData.MediaType != "audio/x-raw" {
+	if msg.AudioData == nil || msg.AudioData.MediaType != pipeline.AudioMediaTypeRaw {
 		return
 	}
 

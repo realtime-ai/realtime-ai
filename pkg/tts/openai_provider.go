@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+
+	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 )
 
 const (
@@ -171,28 +173,28 @@ func (p *OpenAITTSProvider) getAudioFormat(format string) AudioFormat {
 		return AudioFormat{
 			SampleRate: openAIDefaultSampleRate,
 			Channels:   1,
-			MediaType:  "audio/pcm",
+			MediaType:  pipeline.AudioMediaTypePCM,
 			Encoding:   "pcm_s16le",
 		}
 	case "opus":
 		return AudioFormat{
 			SampleRate: 24000,
 			Channels:   1,
-			MediaType:  "audio/opus",
+			MediaType:  pipeline.AudioMediaTypeOpusStandard,
 			Encoding:   "opus",
 		}
 	case "mp3":
 		return AudioFormat{
 			SampleRate: 24000,
 			Channels:   1,
-			MediaType:  "audio/mpeg",
+			MediaType:  pipeline.AudioMediaTypeMPEG,
 			Encoding:   "mp3",
 		}
 	case "wav":
 		return AudioFormat{
 			SampleRate: 24000,
 			Channels:   1,
-			MediaType:  "audio/wav",
+			MediaType:  pipeline.AudioMediaTypeWAV,
 			Encoding:   "wav",
 		}
 	default:
@@ -200,7 +202,7 @@ func (p *OpenAITTSProvider) getAudioFormat(format string) AudioFormat {
 		return AudioFormat{
 			SampleRate: openAIDefaultSampleRate,
 			Channels:   1,
-			MediaType:  "audio/pcm",
+			MediaType:  pipeline.AudioMediaTypePCM,
 			Encoding:   "pcm_s16le",
 		}
 	}
