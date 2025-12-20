@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -402,6 +403,39 @@ func (s *Session) PushAudio(data []byte, sampleRate, channels int) {
 			},
 		})
 	}
+}
+
+// SendAudio sends PCM audio data directly via RTP track.
+// This is used for WebRTC mode where audio is sent via RTP, not base64-encoded events.
+// Returns error if the transport doesn't support RTP audio.
+func (s *Session) SendAudio(data []byte, sampleRate, channels int) error {
+	s.mu.RLock()
+	transport := s.transport
+	s.mu.RUnlock()
+
+	// Check if transport exists
+	if transport == nil {
+		return fmt.Errorf("session has no transport configured")
+	}
+
+	// Check if transport supports RTP audio
+	audioTransport, ok := transport.(AudioTransport)
+	if !ok {
+		return fmt.Errorf("transport does not support RTP audio (WebSocket mode)")
+	}
+
+	// Verify RTP audio is actually supported
+	if !audioTransport.SupportsRTPAudio() {
+		return fmt.Errorf("transport does not support RTP audio")
+	}
+
+	// Send audio via RTP transport
+	if err := audioTransport.SendAudio(data, sampleRate, channels); err != nil {
+		log.Printf("[session %s] failed to send audio via RTP: %v", s.ID, err)
+		return fmt.Errorf("failed to send audio: %w", err)
+	}
+
+	return nil
 }
 
 // writeLoop writes events to the transport.

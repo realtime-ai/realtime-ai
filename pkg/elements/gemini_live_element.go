@@ -19,6 +19,7 @@ var _ pipeline.Element = (*GeminiLiveElement)(nil)
 // Deprecated: Use GeminiLiveElement, GeminiLiveConfig, etc. instead
 type GeminiElement = GeminiLiveElement
 type GeminiConfig = GeminiLiveConfig
+
 const DefaultGeminiModel = DefaultGeminiLiveModel
 
 // Deprecated: Use NewGeminiLiveElement instead
@@ -237,16 +238,16 @@ func (e *GeminiLiveElement) Start(ctx context.Context) error {
 								}
 
 								// Publish audio delta event to bus
-								e.BaseElement.Bus().Publish(pipeline.Event{
-									Type:      pipeline.EventAudioDelta,
-									Timestamp: time.Now(),
-									Payload: &pipeline.AudioDeltaPayload{
-										ResponseID: e.currentResponseID,
-										Data:       part.InlineData.Data,
-										SampleRate: 24000,
-										Channels:   1,
-									},
-								})
+								// e.BaseElement.Bus().Publish(pipeline.Event{
+								// 	Type:      pipeline.EventAudioDelta,
+								// 	Timestamp: time.Now(),
+								// 	Payload: &pipeline.AudioDeltaPayload{
+								// 		ResponseID: e.currentResponseID,
+								// 		Data:       part.InlineData.Data,
+								// 		SampleRate: 24000,
+								// 		Channels:   1,
+								// 	},
+								// })
 
 								// 将 AI 返回的 PCM 数据投递给下一环节
 								e.BaseElement.OutChan <- &pipeline.PipelineMessage{
