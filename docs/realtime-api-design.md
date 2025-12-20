@@ -438,24 +438,27 @@ package main
 
 import (
     "context"
+    "log"
     "os"
 
-    "github.com/realtime-ai/realtime-ai/pkg/realtimeapi"
+    "github.com/realtime-ai/realtime-ai/pkg/server"
 )
 
 func main() {
-    server := realtimeapi.NewServer(realtimeapi.ServerConfig{
-        Addr:          ":8080",
-        Path:          "/v1/realtime",
-        AuthToken:     os.Getenv("API_TOKEN"),
-        DefaultModel:  "gemini-2.0-flash",
-        AllowedModels: []string{"gemini-2.0-flash", "gpt-4o-realtime"},
-    })
+    config := server.DefaultWebSocketRealtimeConfig()
+    config.Addr = ":8080"
+    config.Path = "/v1/realtime"
+    config.AuthToken = os.Getenv("API_TOKEN")
+    config.DefaultModel = "gemini-2.0-flash"
+    config.AllowedModels = []string{"gemini-2.0-flash", "gpt-4o-realtime"}
 
-    server.SetPipelineFactory(realtimeapi.GeminiPipelineFactory)
+    srv := server.NewWebSocketRealtimeServer(config)
+
+    // Set pipeline factory for AI processing
+    srv.SetPipelineFactory(createPipeline)
 
     ctx := context.Background()
-    if err := server.Start(ctx); err != nil {
+    if err := srv.Start(ctx); err != nil {
         log.Fatal(err)
     }
 }

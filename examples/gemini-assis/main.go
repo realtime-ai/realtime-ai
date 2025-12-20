@@ -1,137 +1,144 @@
+// Gemini Assistant Example
+//
+// This example demonstrates the hybrid WebRTC + Realtime API architecture with Gemini:
+// - Audio is transmitted via WebRTC RTP tracks (Opus 48kHz)
+// - Signaling uses WebRTC DataChannel with Realtime API JSON events
+//
+// Usage:
+//
+//	go run examples/gemini-assis/main.go
+//	open http://localhost:8080
 package main
 
 import (
 	"context"
-	_ "embed"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/joho/godotenv"
-	"github.com/realtime-ai/realtime-ai/pkg/connection"
 	"github.com/realtime-ai/realtime-ai/pkg/elements"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
+	"github.com/realtime-ai/realtime-ai/pkg/realtimeapi"
 	"github.com/realtime-ai/realtime-ai/pkg/server"
 )
 
-//go:embed realtime_webrtc.html
-var indexHTML []byte
+func main() {
+	// Load environment variables from .env file
+	godotenv.Load()
 
-type connectionEventHandler struct {
-	connection.ConnectionEventHandler
+	// Get API key from environment
+	apiKey := os.Getenv("GOOGLE_API_KEY")
+	if apiKey == "" {
+		log.Println("Warning: GOOGLE_API_KEY not set, using echo mode")
+	}
 
-	conn connection.Connection
+	// Create server configuration
+	config := server.DefaultWebRTCRealtimeConfig()
+	config.RTCUDPPort = 9000
+	config.ICELite = true
+	config.DefaultModel = elements.DefaultGeminiModel
 
-	pipeline *pipeline.Pipeline
+	// Create server
+	srv := server.NewWebRTCRealtimeServer(config)
+
+	// Set pipeline factory
+	srv.SetPipelineFactory(func(ctx context.Context, session *realtimeapi.Session) (*pipeline.Pipeline, error) {
+		return createPipeline(ctx, session, apiKey)
+	})
+
+	// Start WebRTC server
+	if err := srv.Start(); err != nil {
+		log.Fatalf("Failed to start WebRTC server: %v", err)
+	}
+
+	// HTTP handlers
+	http.HandleFunc("/session", srv.HandleNegotiate)
+	http.Handle("/", http.FileServer(http.Dir("examples/gemini-assis")))
+
+	log.Println("Gemini Assistant server started")
+	log.Println("Open http://localhost:8080 in your browser")
+	log.Println("UDP port: 9000")
+
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		log.Fatalf("Failed to start HTTP server: %v", err)
+	}
 }
 
-func (c *connectionEventHandler) OnConnectionStateChange(state connection.ConnectionState) {
+// createPipeline creates the audio processing pipeline.
+// Audio flow: Input (48kHz) -> Resample (16kHz) -> [Gemini AI] -> Resample (48kHz) -> Output
+func createPipeline(_ context.Context, session *realtimeapi.Session, apiKey string) (*pipeline.Pipeline, error) {
+	p := pipeline.NewPipeline("gemini-assis-" + session.ID)
 
-	log.Printf("OnConnectionStateChange: %v \n", state)
+	if apiKey != "" {
+		// Full pipeline with Gemini AI
+		// Input: WebRTC audio at 48kHz
+		// Resample to 16kHz for Gemini
+		inputResample := elements.NewAudioResampleElement(48000, 16000, 1, 1)
 
-	if state == connection.ConnectionStateConnected {
-
-		audioPacerSinkElement := elements.NewAudioPacerSinkElement()
-		geminiElement := elements.NewGeminiElementWithConfig(elements.GeminiConfig{
-			Model: elements.DefaultGeminiModel, // gemini-2.5-flash-native-audio-preview-12-2025
+		// Gemini AI processing with default model
+		gemini := elements.NewGeminiElementWithConfig(elements.GeminiConfig{
+			Model:  elements.DefaultGeminiModel,
+			APIKey: apiKey,
 		})
-		audioResampleElement := elements.NewAudioResampleElement(48000, 16000, 1, 1)
 
-		// 如果使用 Gemini，则需要添加 Gemini Element
-		pipelineElements := []pipeline.Element{
-			audioResampleElement,
-			geminiElement,
-			audioPacerSinkElement,
-		}
+		// Resample output to 48kHz for WebRTC
+		// Note: Gemini outputs at 24kHz, we need to resample to 48kHz
+		outputResample := elements.NewAudioResampleElement(24000, 48000, 1, 1)
 
-		p := pipeline.NewPipeline("rtc_connection")
-		p.AddElements(pipelineElements)
+		// Add elements
+		p.AddElements([]pipeline.Element{inputResample, gemini, outputResample})
 
-		p.Link(audioResampleElement, geminiElement)
-		p.Link(geminiElement, audioPacerSinkElement)
+		// Link elements
+		p.Link(inputResample, gemini)
+		p.Link(gemini, outputResample)
 
-		c.pipeline = p
+		log.Printf("[Pipeline] Created Gemini pipeline for session %s (model: %s)", session.ID, elements.DefaultGeminiModel)
+	} else {
+		// Echo pipeline for testing without API key
+		echo := NewEchoElement()
+		p.AddElement(echo)
 
-		p.Start(context.Background())
+		log.Printf("[Pipeline] Created Echo pipeline for session %s (no API key)", session.ID)
+	}
 
-		go func() {
-			log.Println("[OUTPUT] 开始监听 Pipeline 输出...")
-			outputFrameCount := 0
-			for {
-				msg := c.pipeline.Pull()
+	return p, nil
+}
 
-				if msg != nil {
-					if msg.Type == pipeline.MsgTypeAudio && msg.AudioData != nil {
-						outputFrameCount++
-						// 只有非 24000Hz（非 Gemini 响应）才减少日志，Gemini 响应全部打印
-						if msg.AudioData.SampleRate == 24000 || outputFrameCount%100 == 1 {
-							log.Printf("[OUTPUT] 发送音频 #%d: %d bytes, 采样率: %d",
-								outputFrameCount, len(msg.AudioData.Data), msg.AudioData.SampleRate)
-						}
-					}
-					c.conn.SendMessage(msg)
+// EchoElement is a simple element that echoes audio back.
+type EchoElement struct {
+	*pipeline.BaseElement
+}
+
+// NewEchoElement creates a new echo element.
+func NewEchoElement() *EchoElement {
+	return &EchoElement{
+		BaseElement: pipeline.NewBaseElement("echo", 100),
+	}
+}
+
+// Start starts the echo element.
+func (e *EchoElement) Start(ctx context.Context) error {
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg, ok := <-e.InChan:
+				if !ok {
+					return
+				}
+				// Echo audio back
+				if msg.AudioData != nil {
+					e.OutChan <- msg
 				}
 			}
-		}()
-
-	}
-}
-
-var inputFrameCount int
-
-func (c *connectionEventHandler) OnMessage(msg *pipeline.PipelineMessage) {
-	if msg.Type == pipeline.MsgTypeAudio && msg.AudioData != nil {
-		inputFrameCount++
-		if inputFrameCount%100 == 1 { // 每 100 帧打印一次
-			log.Printf("[INPUT] 收到音频 #%d: %d bytes, 采样率: %d",
-				inputFrameCount, len(msg.AudioData.Data), msg.AudioData.SampleRate)
 		}
-	}
-	c.pipeline.Push(msg)
+	}()
+	return nil
 }
 
-func (c *connectionEventHandler) OnError(err error) {
-
-	log.Printf("OnError: %v \n", err)
-}
-
-// StartServer 启动 WebRTC 服务器
-func StartServer(addr string) error {
-
-	cfg := &server.ServerConfig{
-		RTCUDPPort: 9000,
-	}
-
-	rtcServer := server.NewRealtimeServer(cfg)
-
-	rtcServer.OnConnectionCreated(func(ctx context.Context, conn connection.Connection) {
-		conn.RegisterEventHandler(&connectionEventHandler{
-			conn: conn,
-		})
-
-	})
-
-	rtcServer.OnConnectionError(func(ctx context.Context, conn connection.Connection, err error) {
-		log.Printf("OnConnectionError: %s, %v \n", conn.PeerID(), err)
-	})
-
-	if err := rtcServer.Start(); err != nil {
-		log.Fatal(err)
-	}
-
-	// Add handler for serving the embedded HTML file
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		w.Write(indexHTML)
-	})
-	http.HandleFunc("/session", rtcServer.HandleNegotiate)
-
-	log.Printf("WebRTC server starting on %s", addr)
-	return http.ListenAndServe(addr, nil)
-}
-
-func main() {
-	godotenv.Load()
-	if err := StartServer(":8080"); err != nil {
-		log.Fatalf("Server failed: %v", err)
-	}
+// Stop stops the echo element.
+func (e *EchoElement) Stop() error {
+	return nil
 }

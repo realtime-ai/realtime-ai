@@ -116,8 +116,18 @@ func (p *OpenAITTSProvider) Synthesize(ctx context.Context, req *SynthesizeReque
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
+	// Determine base URL
+	baseURL := openAITTSEndpoint
+	if envBaseURL := os.Getenv("OPENAI_BASE_URL"); envBaseURL != "" {
+		baseURL = envBaseURL
+		if baseURL[len(baseURL)-1] != '/' {
+			baseURL += "/"
+		}
+		baseURL += "audio/speech"
+	}
+
 	// Create HTTP request
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", openAITTSEndpoint, bytes.NewReader(payloadBytes))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL, bytes.NewReader(payloadBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

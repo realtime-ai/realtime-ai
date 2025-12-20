@@ -14,10 +14,12 @@ import (
 	"github.com/realtime-ai/realtime-ai/pkg/connection"
 )
 
-type RealtimeServer struct {
+// BasicWebRTCServer is a simple WebRTC server without Realtime API protocol.
+// For Realtime API support, use WebRTCRealtimeServer or WebSocketRealtimeServer.
+type BasicWebRTCServer struct {
 	sync.RWMutex
 
-	config  *ServerConfig
+	config  *BasicWebRTCConfig
 	peers   map[string]connection.Connection
 	api     *webrtc.API
 	handler ServerEventHandler
@@ -26,8 +28,9 @@ type RealtimeServer struct {
 	onConnectionError   func(ctx context.Context, conn connection.Connection, err error)
 }
 
-func NewRealtimeServer(cfg *ServerConfig) *RealtimeServer {
-	return &RealtimeServer{
+// NewBasicWebRTCServer creates a new BasicWebRTCServer.
+func NewBasicWebRTCServer(cfg *BasicWebRTCConfig) *BasicWebRTCServer {
+	return &BasicWebRTCServer{
 		config:              cfg,
 		onConnectionCreated: func(ctx context.Context, conn connection.Connection) {},
 		onConnectionError:   func(ctx context.Context, conn connection.Connection, err error) {},
@@ -35,19 +38,24 @@ func NewRealtimeServer(cfg *ServerConfig) *RealtimeServer {
 	}
 }
 
-func (s *RealtimeServer) RegisterEventHandler(handler ServerEventHandler) {
+// Deprecated: NewRealtimeServer is deprecated. Use NewBasicWebRTCServer instead.
+func NewRealtimeServer(cfg *BasicWebRTCConfig) *BasicWebRTCServer {
+	return NewBasicWebRTCServer(cfg)
+}
+
+func (s *BasicWebRTCServer) RegisterEventHandler(handler ServerEventHandler) {
 	s.handler = handler
 }
 
-func (s *RealtimeServer) OnConnectionCreated(f func(ctx context.Context, conn connection.Connection)) {
+func (s *BasicWebRTCServer) OnConnectionCreated(f func(ctx context.Context, conn connection.Connection)) {
 	s.onConnectionCreated = f
 }
 
-func (s *RealtimeServer) OnConnectionError(f func(ctx context.Context, conn connection.Connection, err error)) {
+func (s *BasicWebRTCServer) OnConnectionError(f func(ctx context.Context, conn connection.Connection, err error)) {
 	s.onConnectionError = f
 }
 
-func (s *RealtimeServer) Start() error {
+func (s *BasicWebRTCServer) Start() error {
 
 	settingEngine := webrtc.SettingEngine{}
 	if s.config.ICELite {
@@ -71,7 +79,7 @@ func (s *RealtimeServer) Start() error {
 	})
 
 	if err != nil {
-		fmt.Printf("监听 UDP 端口失败: %v\n", err)
+		fmt.Printf("Failed to listen on UDP port: %v\n", err)
 		return err
 	}
 
@@ -86,13 +94,13 @@ func (s *RealtimeServer) Start() error {
 
 }
 
-// HandleNegotiate 处理 /session 路由
-func (s *RealtimeServer) HandleNegotiate(w http.ResponseWriter, r *http.Request) {
+// HandleNegotiate handles the /session WebRTC negotiation endpoint.
+func (s *BasicWebRTCServer) HandleNegotiate(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-	// 处理 OPTIONS 请求
+	// Handle OPTIONS request for CORS preflight
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
 		return
@@ -116,7 +124,7 @@ func (s *RealtimeServer) HandleNegotiate(w http.ResponseWriter, r *http.Request)
 
 	ctx := context.Background()
 
-	// 创建 PeerConnection
+	// Create PeerConnection
 	pc, err := s.api.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{},
 	})
@@ -156,11 +164,11 @@ func (s *RealtimeServer) HandleNegotiate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// 等待 ICE gathering 完成
+	// Wait for ICE gathering to complete
 	gatherComplete := webrtc.GatheringCompletePromise(pc)
 	<-gatherComplete
 
-	// 返回给前端
+	// Return SDP answer to client
 	w.Header().Set("Content-Type", "application/sdp")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(pc.LocalDescription())

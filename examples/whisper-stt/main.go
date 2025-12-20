@@ -105,6 +105,9 @@ func main() {
 
 	// Set up HTTP handlers
 	http.HandleFunc("/session", rtcServer.HandleNegotiate)
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "examples/whisper-stt/index.html")
+	})
 
 	// Start HTTP server in a goroutine
 	go func() {
@@ -159,7 +162,7 @@ func createPipeline(conn connection.Connection) *pipeline.Pipeline {
 	whisperConfig := elements.WhisperSTTConfig{
 		APIKey:               os.Getenv("OPENAI_API_KEY"),
 		Language:             "auto", // Auto-detect language (or specify: "en", "zh", etc.)
-		Model:                "whisper-1",
+		Model:                "whisper-large-v3-turbo",
 		EnablePartialResults: false,        // Only send final results
 		VADEnabled:           vadElement != nil, // Enable VAD integration if VAD is available
 		SampleRate:           16000,

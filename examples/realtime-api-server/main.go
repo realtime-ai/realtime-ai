@@ -25,6 +25,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 	"github.com/realtime-ai/realtime-ai/pkg/realtimeapi"
+	"github.com/realtime-ai/realtime-ai/pkg/server"
 )
 
 //go:embed index.html
@@ -35,7 +36,7 @@ func main() {
 	godotenv.Load()
 
 	// Create server configuration
-	config := realtimeapi.DefaultServerConfig()
+	config := server.DefaultWebSocketRealtimeConfig()
 	config.Addr = ":8080"
 	config.Path = "/v1/realtime"
 	config.DefaultModel = "echo"
@@ -47,20 +48,20 @@ func main() {
 	}
 
 	// Create server
-	server := realtimeapi.NewServer(config)
+	srv := server.NewWebSocketRealtimeServer(config)
 
 	// Set pipeline factory - using echo pipeline for demo
-	server.SetPipelineFactory(createEchoPipeline)
+	srv.SetPipelineFactory(createEchoPipeline)
 
 	// Serve frontend page at root
-	server.RegisterHandler("/", func(w http.ResponseWriter, r *http.Request) {
+	srv.RegisterHandler("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(indexHTML)
 	})
 
 	// Start server
 	ctx := context.Background()
-	if err := server.Start(ctx); err != nil {
+	if err := srv.Start(ctx); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 
@@ -77,7 +78,7 @@ func main() {
 	log.Println("Shutting down...")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := server.Stop(shutdownCtx); err != nil {
+	if err := srv.Stop(shutdownCtx); err != nil {
 		log.Printf("Error during shutdown: %v", err)
 	}
 	log.Println("Server stopped")
