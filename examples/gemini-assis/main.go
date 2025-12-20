@@ -31,43 +31,61 @@ func (c *connectionEventHandler) OnConnectionStateChange(state connection.Connec
 	if state == connection.ConnectionStateConnected {
 
 		audioPacerSinkElement := elements.NewAudioPacerSinkElement()
-		geminiElement := elements.NewGeminiElement()
+		geminiElement := elements.NewGeminiElementWithConfig(elements.GeminiConfig{
+			Model: elements.DefaultGeminiModel, // gemini-2.5-flash-native-audio-preview-12-2025
+		})
 		audioResampleElement := elements.NewAudioResampleElement(48000, 16000, 1, 1)
 
 		// 如果使用 Gemini，则需要添加 Gemini Element
-		elements := []pipeline.Element{
+		pipelineElements := []pipeline.Element{
 			audioResampleElement,
 			geminiElement,
 			audioPacerSinkElement,
 		}
 
-		pipeline := pipeline.NewPipeline("rtc_connection")
-		pipeline.AddElements(elements)
+		p := pipeline.NewPipeline("rtc_connection")
+		p.AddElements(pipelineElements)
 
-		pipeline.Link(audioResampleElement, geminiElement)
-		pipeline.Link(geminiElement, audioPacerSinkElement)
+		p.Link(audioResampleElement, geminiElement)
+		p.Link(geminiElement, audioPacerSinkElement)
 
-		c.pipeline = pipeline
+		c.pipeline = p
 
-		pipeline.Start(context.Background())
+		p.Start(context.Background())
 
 		go func() {
-
+			log.Println("[OUTPUT] 开始监听 Pipeline 输出...")
+			outputFrameCount := 0
 			for {
 				msg := c.pipeline.Pull()
 
 				if msg != nil {
+					if msg.Type == pipeline.MsgTypeAudio && msg.AudioData != nil {
+						outputFrameCount++
+						// 只有非 24000Hz（非 Gemini 响应）才减少日志，Gemini 响应全部打印
+						if msg.AudioData.SampleRate == 24000 || outputFrameCount%100 == 1 {
+							log.Printf("[OUTPUT] 发送音频 #%d: %d bytes, 采样率: %d",
+								outputFrameCount, len(msg.AudioData.Data), msg.AudioData.SampleRate)
+						}
+					}
 					c.conn.SendMessage(msg)
 				}
 			}
-
 		}()
 
 	}
 }
 
-func (c *connectionEventHandler) OnMessage(msg *pipeline.PipelineMessage) {
+var inputFrameCount int
 
+func (c *connectionEventHandler) OnMessage(msg *pipeline.PipelineMessage) {
+	if msg.Type == pipeline.MsgTypeAudio && msg.AudioData != nil {
+		inputFrameCount++
+		if inputFrameCount%100 == 1 { // 每 100 帧打印一次
+			log.Printf("[INPUT] 收到音频 #%d: %d bytes, 采样率: %d",
+				inputFrameCount, len(msg.AudioData.Data), msg.AudioData.SampleRate)
+		}
+	}
 	c.pipeline.Push(msg)
 }
 
@@ -113,5 +131,7 @@ func StartServer(addr string) error {
 
 func main() {
 	godotenv.Load()
-	StartServer(":8080")
+	if err := StartServer(":8080"); err != nil {
+		log.Fatalf("Server failed: %v", err)
+	}
 }

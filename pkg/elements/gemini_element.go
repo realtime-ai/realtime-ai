@@ -16,22 +16,49 @@ import (
 // Make sure GeminiElement implements pipeline.Element
 var _ pipeline.Element = (*GeminiElement)(nil)
 
+// DefaultGeminiModel is the default model used by GeminiElement
+const DefaultGeminiModel = "gemini-2.5-flash-native-audio-preview-12-2025"
+
+// GeminiConfig holds configuration for GeminiElement
+type GeminiConfig struct {
+	// Model is the Gemini model to use (default: gemini-2.5-flash-native-audio-preview-12-2025)
+	Model string
+	// APIKey is the Google API key (default: from GOOGLE_API_KEY env)
+	APIKey string
+}
+
+// DefaultGeminiConfig returns the default configuration
+func DefaultGeminiConfig() GeminiConfig {
+	return GeminiConfig{
+		Model:  DefaultGeminiModel,
+		APIKey: os.Getenv("GOOGLE_API_KEY"),
+	}
+}
+
 type GeminiElement struct {
 	*pipeline.BaseElement
 
+	model     string
+	apiKey    string
 	session   *genai.Session
 	sessionID string
 	dumper    *audio.Dumper
 
 	// Response tracking
-	inResponse       bool
+	inResponse        bool
 	currentResponseID string
 
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
 
+// NewGeminiElement creates a new GeminiElement with default configuration
 func NewGeminiElement() *GeminiElement {
+	return NewGeminiElementWithConfig(DefaultGeminiConfig())
+}
+
+// NewGeminiElementWithConfig creates a new GeminiElement with custom configuration
+func NewGeminiElementWithConfig(cfg GeminiConfig) *GeminiElement {
 	var dumper *audio.Dumper
 	var err error
 
@@ -42,8 +69,20 @@ func NewGeminiElement() *GeminiElement {
 		}
 	}
 
+	model := cfg.Model
+	if model == "" {
+		model = DefaultGeminiModel
+	}
+
+	apiKey := cfg.APIKey
+	if apiKey == "" {
+		apiKey = os.Getenv("GOOGLE_API_KEY")
+	}
+
 	return &GeminiElement{
 		BaseElement: pipeline.NewBaseElement("gemini-element", 100),
+		model:       model,
+		apiKey:      apiKey,
 		dumper:      dumper,
 	}
 }
@@ -54,23 +93,23 @@ func (e *GeminiElement) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	e.cancel = cancel
 
-	apiKey := os.Getenv("GOOGLE_API_KEY")
-
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{APIKey: apiKey, Backend: genai.BackendGoogleAI})
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{APIKey: e.apiKey, Backend: genai.BackendGoogleAI})
 	if err != nil {
-		log.Fatal("create client error: ", err)
+		log.Printf("[GEMINI] create client error: %v", err)
 		return err
 	}
 
-	session, err := client.Live.Connect("gemini-2.0-flash-exp", &genai.LiveConnectConfig{
+	log.Printf("[GEMINI] 正在连接模型: %s", e.model)
+	session, err := client.Live.Connect(e.model, &genai.LiveConnectConfig{
 		ResponseModalities: []string{"AUDIO"},
 	})
 	if err != nil {
-		log.Fatal("connect to model error: ", err)
+		log.Printf("[GEMINI] connect to model error: %v", err)
 		return err
 	}
 
 	e.session = session
+	log.Printf("[GEMINI] 成功连接到 Gemini Live API (模型: %s)", e.model)
 
 	// 启动音频输入处理协程
 	e.wg.Add(1)
@@ -97,9 +136,11 @@ func (e *GeminiElement) Start(ctx context.Context) error {
 						}
 
 						if err := e.session.Send(&liveMsg); err != nil {
-							log.Println("AI session send error:", err)
+							log.Println("[GEMINI] AI session send error:", err)
 							continue
 						}
+					} else {
+						log.Println("[GEMINI] session 为空，无法发送音频")
 					}
 				} else if msg.Type == pipeline.MsgTypeData {
 					liveMsg := genai.LiveClientMessage{}
@@ -125,6 +166,7 @@ func (e *GeminiElement) Start(ctx context.Context) error {
 
 	if e.session != nil {
 		go func() {
+			log.Println("[GEMINI] 开始监听 Gemini 响应...")
 			for {
 				select {
 				case <-ctx.Done():
@@ -168,6 +210,7 @@ func (e *GeminiElement) Start(ctx context.Context) error {
 					if msg.ServerContent != nil && msg.ServerContent.ModelTurn != nil {
 						for _, part := range msg.ServerContent.ModelTurn.Parts {
 							if part.InlineData != nil && len(part.InlineData.Data) > 0 {
+								log.Printf("[GEMINI] 收到 Gemini 音频响应: %d bytes", len(part.InlineData.Data))
 								// Start response if not already started
 								if !e.inResponse {
 									e.startNewResponse()

@@ -2,6 +2,7 @@ package connection
 
 import (
 	"context"
+	"io"
 	"log"
 	"sync"
 	"time"
@@ -192,11 +193,15 @@ func (c *webrtcConnection) setupDataChannel(dc *webrtc.DataChannel) {
 func (c *webrtcConnection) readRemoteAudio() {
 	defer c.wg.Done()
 
+	log.Printf("[webrtc %s] 开始读取远程音频...", c.peerID)
+
 	pcmBuf := make([]int16, 1920) // 20ms at 48kHz stereo
+	frameCount := 0
 
 	for {
 		select {
 		case <-c.ctx.Done():
+			log.Printf("[webrtc %s] 音频读取被取消", c.peerID)
 			return
 		default:
 			c.mu.RLock()
@@ -204,12 +209,23 @@ func (c *webrtcConnection) readRemoteAudio() {
 			c.mu.RUnlock()
 
 			if track == nil {
+				log.Printf("[webrtc %s] 远程音频轨道为空，退出", c.peerID)
 				return
 			}
 
 			rtpPacket, _, err := track.ReadRTP()
 			if err != nil {
+				// EOF 是正常的连接关闭
+				if err == io.EOF {
+					log.Printf("[webrtc %s] 远程音频轨道已关闭", c.peerID)
+					return
+				}
 				log.Printf("[webrtc %s] RTP read error: %v", c.peerID, err)
+				continue
+			}
+
+			// 跳过空的 RTP 包
+			if len(rtpPacket.Payload) == 0 {
 				continue
 			}
 
@@ -221,6 +237,12 @@ func (c *webrtcConnection) readRemoteAudio() {
 			}
 
 			audioData := utils.Int16SliceToByteSlice(pcmBuf[:n])
+
+			frameCount++
+			if frameCount%100 == 1 { // 每 100 帧打印一次（约 2 秒）
+				log.Printf("[webrtc %s] 收到音频帧 #%d: %d samples, %d bytes",
+					c.peerID, frameCount, n, len(audioData))
+			}
 
 			msg := &pipeline.PipelineMessage{
 				Type: pipeline.MsgTypeAudio,

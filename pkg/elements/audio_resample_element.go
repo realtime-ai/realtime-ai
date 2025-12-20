@@ -83,7 +83,7 @@ func (e *AudioResampleElement) Start(ctx context.Context) error {
 				// 重采样
 				outData, err := e.resample.Resample(msg.AudioData.Data)
 				if err != nil {
-					log.Printf("Resample error: %v", err)
+					log.Printf("[RESAMPLE] 重采样错误: %v", err)
 					continue
 				}
 
