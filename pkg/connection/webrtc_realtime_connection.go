@@ -233,9 +233,17 @@ func (c *webrtcRealtimeConnectionImpl) readRemoteAudio(ctx context.Context) {
 			}
 
 			// Decode Opus to PCM
+			// Debug: check RTP packet payload
+			if len(rtpPacket.Payload) == 0 {
+				log.Printf("[webrtc-realtime %s] Warning: RTP packet has empty payload (PayloadType: %d, SSRC: %d)",
+					c.sessionID, rtpPacket.PayloadType, rtpPacket.SSRC)
+				continue
+			}
+
 			n, err := c.audioDecoder.Decode(rtpPacket.Payload, pcmBuf)
 			if err != nil {
-				log.Printf("[webrtc-realtime %s] Opus decode error: %v", c.sessionID, err)
+				log.Printf("[webrtc-realtime %s] Opus decode error: payload len=%d, error=%v",
+					c.sessionID, len(rtpPacket.Payload), err)
 				continue
 			}
 

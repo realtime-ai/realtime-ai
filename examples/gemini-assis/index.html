@@ -1,389 +1,765 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title> Realtime AI </title>
+    <title>Gemini Realtime Assistant</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             max-width: 800px;
             margin: 0 auto;
             padding: 20px;
-            background-color: #f5f5f5;
+            background-color: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
         }
 
         .container {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: #16213e;
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
         }
 
         h2 {
-            color: #2c3e50;
-            margin-bottom: 20px;
+            color: #e94560;
+            margin-bottom: 24px;
             text-align: center;
+            font-size: 24px;
         }
 
         .status-bar {
             display: flex;
             align-items: center;
-            margin-bottom: 20px;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 5px;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            padding: 12px 16px;
+            background: #0f3460;
+            border-radius: 12px;
+        }
+
+        .status-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
         #status {
-            margin-right: 10px;
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 14px;
-            font-weight: 500;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
         }
 
         #status.disconnected {
-            background: #ffebee;
-            color: #d32f2f;
+            background: #e94560;
+            color: white;
+        }
+
+        #status.connecting {
+            background: #f39c12;
+            color: white;
         }
 
         #status.connected {
-            background: #e8f5e9;
-            color: #2e7d32;
+            background: #27ae60;
+            color: white;
         }
 
+        #sessionId {
+            font-size: 12px;
+            color: #888;
+        }
+
+        button {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 8px;
+            background: #e94560;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: #c73e54;
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        button.disconnect {
+            background: #555;
+        }
+
+        button.disconnect:hover {
+            background: #666;
+        }
+
+        /* Subtitle Area */
+        .subtitle-container {
+            margin-bottom: 24px;
+            padding: 20px;
+            background: #0f3460;
+            border-radius: 12px;
+            min-height: 120px;
+            position: relative;
+        }
+
+        .subtitle-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #888;
+            margin-bottom: 12px;
+        }
+
+        .subtitle-text {
+            font-size: 18px;
+            line-height: 1.6;
+            min-height: 60px;
+        }
+
+        .subtitle-text.user {
+            color: #74b9ff;
+        }
+
+        .subtitle-text.assistant {
+            color: #55efc4;
+        }
+
+        .subtitle-text.empty {
+            color: #555;
+            font-style: italic;
+        }
+
+        .speaking-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #e94560;
+            border-radius: 50%;
+            margin-left: 8px;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        /* Conversation History */
+        .conversation-container {
+            margin-bottom: 24px;
+        }
+
+        .conversation-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #888;
+            margin-bottom: 12px;
+        }
+
+        #conversation {
+            height: 300px;
+            overflow-y: auto;
+            padding: 16px;
+            background: #0f3460;
+            border-radius: 12px;
+        }
+
+        .message {
+            margin-bottom: 16px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 85%;
+            word-wrap: break-word;
+        }
+
+        .message.user {
+            background: #2d4a7c;
+            margin-left: auto;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant {
+            background: #1e3a5f;
+            margin-right: auto;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message .role {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #888;
+            margin-bottom: 6px;
+        }
+
+        .message .content {
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .message .timestamp {
+            font-size: 10px;
+            color: #666;
+            margin-top: 6px;
+            text-align: right;
+        }
+
+        /* Text Input */
         .input-group {
             display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
+            gap: 12px;
+            margin-bottom: 24px;
         }
 
         input[type="text"] {
             flex: 1;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 16px;
+            padding: 14px 18px;
+            border: 2px solid #0f3460;
+            border-radius: 12px;
+            font-size: 15px;
+            background: #0f3460;
+            color: #eee;
+            transition: border-color 0.2s;
         }
 
-        button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            background: #1a73e8;
-            color: white;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background 0.2s;
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #e94560;
         }
 
-        button:hover {
-            background: #1557b0;
+        input[type="text"]::placeholder {
+            color: #666;
         }
 
-        button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-        #messages {
-            height: 400px;
-            overflow-y: auto;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            background: #fff;
-        }
-
-        .message {
-            margin-bottom: 10px;
-            padding: 10px;
-            border-radius: 5px;
-            max-width: 80%;
-        }
-
-        .sent {
-            background: #e3f2fd;
-            margin-left: auto;
-            border-radius: 15px 15px 0 15px;
-        }
-
-        .received {
-            background: #f5f5f5;
-            margin-right: auto;
-            border-radius: 15px 15px 15px 0;
-        }
-
+        /* Audio Controls */
         .audio-controls {
-            margin-top: 20px;
-            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            padding: 16px;
+            background: #0f3460;
+            border-radius: 12px;
         }
 
         .audio-status {
-            display: inline-block;
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 14px;
-            background: #e8f5e9;
-            color: #2e7d32;
-            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: #888;
         }
 
-        .video-container {
-            margin-top: 20px;
-            text-align: center;
+        .audio-status.active {
+            color: #27ae60;
         }
-        #localVideo {
-            width: 320px;
-            height: 240px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
+
+        .mic-icon {
+            width: 20px;
+            height: 20px;
         }
-        #capturedImage {
-            margin-top: 10px;
-            max-width: 320px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
+
+        /* Event Log (collapsed by default) */
+        .event-log-container {
+            margin-top: 24px;
+        }
+
+        .event-log-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background: #0f3460;
+            border-radius: 12px;
+            cursor: pointer;
+        }
+
+        .event-log-header:hover {
+            background: #1a4a70;
+        }
+
+        .event-log-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #888;
+        }
+
+        #eventLog {
+            display: none;
+            height: 200px;
+            overflow-y: auto;
+            padding: 12px;
+            background: #0a0a15;
+            border-radius: 0 0 12px 12px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 11px;
+            margin-top: -12px;
+        }
+
+        #eventLog.show {
+            display: block;
+        }
+
+        .event-entry {
+            margin-bottom: 4px;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .event-entry.sent {
+            background: rgba(116, 185, 255, 0.1);
+            color: #74b9ff;
+        }
+
+        .event-entry.received {
+            background: rgba(85, 239, 196, 0.1);
+            color: #55efc4;
+        }
+
+        .event-entry.error {
+            background: rgba(233, 69, 96, 0.1);
+            color: #e94560;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>Gemini Realtime WebRTC</h2>
-        
+        <h2>Gemini Realtime Assistant</h2>
+
         <div class="status-bar">
-            <div id="status" class="disconnected">Disconnected</div>
-            <button id="connect">Connect</button>
+            <div class="status-info">
+                <div id="status" class="disconnected">Disconnected</div>
+                <div id="sessionId"></div>
+            </div>
+            <button id="connectBtn">Connect</button>
         </div>
 
+        <!-- Real-time Subtitles -->
+        <div class="subtitle-container">
+            <div class="subtitle-label">Live Transcript</div>
+            <div id="userSubtitle" class="subtitle-text empty">Waiting for speech...</div>
+            <div id="assistantSubtitle" class="subtitle-text assistant" style="margin-top: 12px;"></div>
+        </div>
+
+        <!-- Text Input -->
         <div class="input-group">
-            <input type="text" id="message" placeholder="Type your message here...">
-            <button id="send">Send</button>
+            <input type="text" id="messageInput" placeholder="Type a message or just speak..." disabled>
+            <button id="sendBtn" disabled>Send</button>
         </div>
 
-        <div id="messages"></div>
+        <!-- Conversation History -->
+        <div class="conversation-container">
+            <div class="conversation-label">Conversation</div>
+            <div id="conversation"></div>
+        </div>
 
+        <!-- Audio Controls -->
         <div class="audio-controls">
-            <div class="audio-status">Audio Enabled</div>
+            <div id="micStatus" class="audio-status">
+                <svg class="mic-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                </svg>
+                <span>Microphone Off</span>
+            </div>
+            <div id="speakerStatus" class="audio-status">
+                <svg class="mic-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                </svg>
+                <span>Speaker Ready</span>
+            </div>
         </div>
 
-        <div class="video-container">
-            <video id="localVideo" autoplay playsinline muted></video>
-            <canvas id="canvas" style="display:none;"></canvas>
-            <img id="capturedImage" />
+        <!-- Event Log (Debug) -->
+        <div class="event-log-container">
+            <div class="event-log-header" onclick="toggleEventLog()">
+                <span class="event-log-title">Event Log</span>
+                <span id="eventLogToggle">+</span>
+            </div>
+            <div id="eventLog"></div>
         </div>
     </div>
 
     <script>
-        let pc;
-        let dc;
-        let videoTrack;
-        let imageCapture;
-        let captureInterval;
+        // State
+        let pc = null;
+        let dc = null;
+        let audioEl = null;
+        let sessionId = null;
+        let currentResponseId = null;
+        let currentItemId = null;
+        let assistantTranscript = '';
+        let userTranscript = '';
+        let isUserSpeaking = false;
 
-        async function setupVideoCapture(stream) {
-            videoTrack = stream.getVideoTracks()[0];
-            const video = document.getElementById('localVideo');
-            video.srcObject = new MediaStream([videoTrack]);
+        // DOM Elements
+        const statusEl = document.getElementById('status');
+        const sessionIdEl = document.getElementById('sessionId');
+        const connectBtn = document.getElementById('connectBtn');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const conversationEl = document.getElementById('conversation');
+        const userSubtitleEl = document.getElementById('userSubtitle');
+        const assistantSubtitleEl = document.getElementById('assistantSubtitle');
+        const micStatusEl = document.getElementById('micStatus');
+        const eventLogEl = document.getElementById('eventLog');
 
-            // 创建 ImageCapture
-            imageCapture = new ImageCapture(videoTrack);
-
-            // 设置定时捕获
-            captureInterval = setInterval(async () => {
-                try {
-                    // 捕获图像
-                    const bitmap = await imageCapture.grabFrame();
-                    
-                    // 使用 canvas 转换为 JPEG
-                    const canvas = document.getElementById('canvas');
-                    canvas.width = bitmap.width;
-                    canvas.height = bitmap.height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(bitmap, 0, 0);
-                    
-                    // 转换为 JPEG 并压缩
-                    const jpeg = canvas.toDataURL('image/jpeg', 0.5);
-                    
-                    // var encodedImage = videoCanvas.toDataURL('image/jpeg').split(';base64,')[1];
-
-                    // 显示预览
-                    document.getElementById('capturedImage').src = jpeg;
-
-                    // 通过 DataChannel 发送
-                    if (dc && dc.readyState === 'open') {
-                        // 移除 base64 头部
-                        const base64Data = jpeg.split(';base64,')[1];
-
-                        //console.log('base64Data', base64Data);
-                        // 构建消息
-                        data = { 'realtimeInput': { 'mediaChunks': [{ 'data': base64Data, 'mimeType': 'image/jpeg' }] } };
-                        
-                        dc.send(JSON.stringify(data));
-                    }
-                } catch (err) {
-                    console.error('Error capturing image:', err);
-                }
-            }, 1000); // 每秒捕获一次
+        // Toggle event log visibility
+        function toggleEventLog() {
+            eventLogEl.classList.toggle('show');
+            document.getElementById('eventLogToggle').textContent =
+                eventLogEl.classList.contains('show') ? '-' : '+';
         }
 
-        const connect = async () => {
-            // Create RTCPeerConnection
-            pc = new RTCPeerConnection();
+        // Log events
+        function logEvent(type, data) {
+            const entry = document.createElement('div');
+            entry.className = `event-entry ${type}`;
+            const time = new Date().toLocaleTimeString();
+            const text = typeof data === 'string' ? data : JSON.stringify(data);
+            entry.textContent = `[${time}] ${text.substring(0, 200)}${text.length > 200 ? '...' : ''}`;
+            eventLogEl.appendChild(entry);
+            eventLogEl.scrollTop = eventLogEl.scrollHeight;
+        }
 
-            // Create Data Channel
-            dc = pc.createDataChannel('data');
-            dc.onmessage = e => {
-                const messages = document.getElementById('messages');
-                const messageDiv = document.createElement('div');
-                messageDiv.className = 'message received';
+        // Update status
+        function setStatus(status, text) {
+            statusEl.className = status;
+            statusEl.textContent = text;
+        }
 
-                const decoder = new TextDecoder('utf-8');
-                const jsonString = decoder.decode(e.data);
-                let data;
+        // Add message to conversation
+        function addMessage(role, content) {
+            const msg = document.createElement('div');
+            msg.className = `message ${role}`;
+            msg.innerHTML = `
+                <div class="role">${role === 'user' ? 'You' : 'Assistant'}</div>
+                <div class="content">${content}</div>
+                <div class="timestamp">${new Date().toLocaleTimeString()}</div>
+            `;
+            conversationEl.appendChild(msg);
+            conversationEl.scrollTop = conversationEl.scrollHeight;
+        }
 
-                try {
-                    data = JSON.parse(jsonString);
-                } catch (e) {
-                    console.error('JSON 解析失败:', e);
-                    return null;
-                }
+        // Handle incoming Realtime API events
+        function handleServerEvent(event) {
+            logEvent('received', `${event.type}`);
 
-                let text;
-                if (!data.serverContent) return;
-                if (data.serverContent.turnComplete) {
-                    text = 'turn complete';
-                } 
+            switch (event.type) {
+                case 'session.created':
+                    sessionId = event.session.id;
+                    sessionIdEl.textContent = `Session: ${sessionId}`;
+                    logEvent('received', `Session created: ${sessionId}`);
+                    break;
 
-                if (data.serverContent.Interrupted) {
-                    text = 'interrupted';
-                }
-                
-                if(text) {
-                    messageDiv.textContent = `Received: ${text}`;
-                    messages.appendChild(messageDiv);
-                    messages.scrollTop = messages.scrollHeight;
-                }
-            };
-            dc.onopen = () => {
-                const status = document.getElementById('status');
-                status.textContent = 'Connected';
-                status.className = 'connected';
-                document.getElementById('connect').disabled = true;
-            };
+                case 'session.updated':
+                    logEvent('received', 'Session updated');
+                    break;
 
-            const audioEl = document.createElement("audio");
-            audioEl.autoplay = true;
-            pc.ontrack = (e) => {
-                console.log("ontrack", e);
-                audioEl.srcObject = e.streams[0];
-            };
+                case 'input_audio_buffer.speech_started':
+                    isUserSpeaking = true;
+                    userSubtitleEl.className = 'subtitle-text user';
+                    userSubtitleEl.innerHTML = 'Listening...<span class="speaking-indicator"></span>';
+                    break;
 
-            // 获取音频和视频流
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: true,
-                video: {
-                    width: { ideal: 640 },
-                    height: { ideal: 480 },
-                    frameRate: { ideal: 30 }
-                }
-            });
+                case 'input_audio_buffer.speech_stopped':
+                    isUserSpeaking = false;
+                    if (userTranscript) {
+                        userSubtitleEl.textContent = userTranscript;
+                    } else {
+                        userSubtitleEl.innerHTML = 'Processing...';
+                    }
+                    break;
 
-            // 设置音频轨道
-            await pc.addTransceiver(stream.getAudioTracks()[0], { direction: 'sendrecv' });
-            
-            // 设置视频捕获
-            await setupVideoCapture(stream);
+                case 'conversation.item.input_audio_transcription.completed':
+                    // User's speech has been transcribed
+                    userTranscript = event.transcript || '';
+                    userSubtitleEl.className = 'subtitle-text user';
+                    userSubtitleEl.textContent = userTranscript || '(no speech detected)';
+                    if (userTranscript) {
+                        addMessage('user', userTranscript);
+                    }
+                    break;
 
-            // Create offer
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
+                case 'response.created':
+                    currentResponseId = event.response.id;
+                    assistantTranscript = '';
+                    assistantSubtitleEl.textContent = '';
+                    break;
 
-            // Wait for ICE gathering to complete
-            await new Promise(resolve => {
-                if (pc.iceGatheringState === 'complete') {
-                    resolve();
-                } else {
-                    pc.addEventListener('icegatheringstatechange', () => {
-                        if (pc.iceGatheringState === 'complete') {
-                            resolve();
-                        }
-                    });
-                }
-            });
+                case 'response.output_item.added':
+                    currentItemId = event.item?.id;
+                    break;
 
-            // Send offer using WebRTC endpoint
-            const response = await fetch('http://localhost:8080/session', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/sdp',
-                },
-                body: JSON.stringify(pc.localDescription)
-            });
+                case 'response.audio_transcript.delta':
+                    // Streaming transcript of assistant's audio response
+                    assistantTranscript += event.delta || '';
+                    assistantSubtitleEl.innerHTML = assistantTranscript + '<span class="speaking-indicator"></span>';
+                    break;
 
-            if (!response.ok) {
-                throw new Error('Failed to connect');
+                case 'response.audio_transcript.done':
+                    assistantSubtitleEl.textContent = event.transcript || assistantTranscript;
+                    break;
+
+                case 'response.text.delta':
+                    // Text response delta
+                    assistantTranscript += event.delta || '';
+                    assistantSubtitleEl.textContent = assistantTranscript;
+                    break;
+
+                case 'response.text.done':
+                    assistantSubtitleEl.textContent = event.text || assistantTranscript;
+                    break;
+
+                case 'response.done':
+                    // Response complete
+                    if (assistantTranscript) {
+                        addMessage('assistant', assistantTranscript);
+                    }
+                    assistantTranscript = '';
+                    currentResponseId = null;
+                    currentItemId = null;
+                    break;
+
+                case 'response.audio.delta':
+                    // Audio data - handled by WebRTC track
+                    break;
+
+                case 'error':
+                    logEvent('error', `Error: ${event.error?.message || 'Unknown error'}`);
+                    break;
+
+                default:
+                    // Log other events for debugging
+                    break;
             }
+        }
 
-            // Get and set remote description
-            const answer = await response.json();
-            await pc.setRemoteDescription(answer);
-        };
+        // Send Realtime API event
+        function sendEvent(event) {
+            if (dc && dc.readyState === 'open') {
+                const eventWithId = {
+                    event_id: 'evt_' + Math.random().toString(36).substr(2, 9),
+                    ...event
+                };
+                dc.send(JSON.stringify(eventWithId));
+                logEvent('sent', event.type);
+            }
+        }
 
-        // Event listeners
-        document.getElementById('connect').onclick = () => {
-            connect().catch(err => {
-                console.error('Connection failed:', err);
-                const status = document.getElementById('status');
-                status.textContent = 'Connection failed';
-                status.className = 'disconnected';
+        // Send text message
+        function sendTextMessage(text) {
+            if (!text.trim()) return;
+
+            // Create conversation item with text
+            sendEvent({
+                type: 'conversation.item.create',
+                item: {
+                    type: 'message',
+                    role: 'user',
+                    content: [{
+                        type: 'input_text',
+                        text: text
+                    }]
+                }
             });
-        };
-        
-        document.getElementById('send').onclick = () => {
-            const input = document.getElementById('message');
-            if (dc && dc.readyState === 'open' && input.value.trim()) {
-                const message = {
-                    clientContent: {
-                        turnComplete: true,
-                        turns: [{
-                            parts: [{
-                                text: input.value
-                            }]
-                        }]
+
+            // Request response
+            sendEvent({
+                type: 'response.create'
+            });
+
+            addMessage('user', text);
+            messageInput.value = '';
+        }
+
+        // Connect to WebRTC server
+        async function connect() {
+            try {
+                setStatus('connecting', 'Connecting...');
+                connectBtn.disabled = true;
+
+                // Create RTCPeerConnection
+                pc = new RTCPeerConnection();
+
+                // Create Data Channel for Realtime API events
+                dc = pc.createDataChannel('oai-events');
+
+                dc.onopen = () => {
+                    setStatus('connected', 'Connected');
+                    connectBtn.textContent = 'Disconnect';
+                    connectBtn.className = 'disconnect';
+                    connectBtn.disabled = false;
+                    messageInput.disabled = false;
+                    sendBtn.disabled = false;
+                    micStatusEl.classList.add('active');
+                    micStatusEl.querySelector('span').textContent = 'Microphone Active';
+                    logEvent('received', 'DataChannel opened');
+                };
+
+                dc.onclose = () => {
+                    logEvent('received', 'DataChannel closed');
+                };
+
+                dc.onmessage = (e) => {
+                    try {
+                        const decoder = new TextDecoder('utf-8');
+                        const jsonString = typeof e.data === 'string' ? e.data : decoder.decode(e.data);
+                        const event = JSON.parse(jsonString);
+                        handleServerEvent(event);
+                    } catch (err) {
+                        console.error('Failed to parse event:', err);
+                        logEvent('error', 'Failed to parse event');
                     }
                 };
-                dc.send(JSON.stringify(message));
-                
-                const messages = document.getElementById('messages');
-                const messageDiv = document.createElement('div');
-                messageDiv.className = 'message sent';
-                messageDiv.textContent = `Sent: ${input.value}`;
-                messages.appendChild(messageDiv);
-                messages.scrollTop = messages.scrollHeight;
-                
-                input.value = '';
-            }
-        };
 
-        // 添加回车发送功能
-        document.getElementById('message').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                document.getElementById('send').click();
-            }
-        });
+                // Create audio element for playback
+                audioEl = document.createElement('audio');
+                audioEl.autoplay = true;
 
-        // 清理函数
-        window.addEventListener('beforeunload', () => {
-            if (captureInterval) {
-                clearInterval(captureInterval);
+                pc.ontrack = (e) => {
+                    console.log('Received audio track');
+                    audioEl.srcObject = e.streams[0];
+                    logEvent('received', 'Audio track received');
+                };
+
+                // Get microphone access
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+
+                // Add audio track
+                await pc.addTransceiver(stream.getAudioTracks()[0], {
+                    direction: 'sendrecv'
+                });
+
+                // Create and send offer
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                // Wait for ICE gathering
+                await new Promise(resolve => {
+                    if (pc.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        pc.addEventListener('icegatheringstatechange', () => {
+                            if (pc.iceGatheringState === 'complete') {
+                                resolve();
+                            }
+                        });
+                    }
+                });
+
+                // Send offer to server
+                const response = await fetch('/session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(pc.localDescription)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                // Set remote description
+                if (data.sdp) {
+                    await pc.setRemoteDescription(data.sdp);
+                } else {
+                    await pc.setRemoteDescription(data);
+                }
+
+                if (data.session_id) {
+                    sessionId = data.session_id;
+                    sessionIdEl.textContent = `Session: ${sessionId}`;
+                }
+
+                logEvent('received', 'WebRTC connected');
+
+            } catch (err) {
+                console.error('Connection failed:', err);
+                setStatus('disconnected', 'Connection Failed');
+                connectBtn.disabled = false;
+                connectBtn.textContent = 'Connect';
+                connectBtn.className = '';
+                logEvent('error', `Connection failed: ${err.message}`);
             }
-            if (videoTrack) {
-                videoTrack.stop();
+        }
+
+        // Disconnect
+        function disconnect() {
+            if (dc) {
+                dc.close();
+                dc = null;
             }
             if (pc) {
                 pc.close();
+                pc = null;
             }
+            if (audioEl) {
+                audioEl.srcObject = null;
+                audioEl = null;
+            }
+
+            sessionId = null;
+            sessionIdEl.textContent = '';
+            setStatus('disconnected', 'Disconnected');
+            connectBtn.textContent = 'Connect';
+            connectBtn.className = '';
+            messageInput.disabled = true;
+            sendBtn.disabled = true;
+            micStatusEl.classList.remove('active');
+            micStatusEl.querySelector('span').textContent = 'Microphone Off';
+            userSubtitleEl.className = 'subtitle-text empty';
+            userSubtitleEl.textContent = 'Waiting for speech...';
+            assistantSubtitleEl.textContent = '';
+        }
+
+        // Event Listeners
+        connectBtn.onclick = () => {
+            if (pc && pc.connectionState === 'connected') {
+                disconnect();
+            } else {
+                connect();
+            }
+        };
+
+        sendBtn.onclick = () => {
+            sendTextMessage(messageInput.value);
+        };
+
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendTextMessage(messageInput.value);
+            }
+        });
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            disconnect();
         });
     </script>
 </body>
-</html> 
+</html>

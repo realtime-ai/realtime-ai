@@ -36,7 +36,7 @@ func main() {
 	// Create server configuration
 	config := server.DefaultWebRTCRealtimeConfig()
 	config.RTCUDPPort = 9000
-	config.ICELite = true
+	config.ICELite = false
 	config.DefaultModel = elements.DefaultGeminiModel
 
 	// Create server

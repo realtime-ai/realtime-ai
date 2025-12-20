@@ -13,29 +13,49 @@ import (
 	"google.golang.org/genai"
 )
 
-// Make sure GeminiElement implements pipeline.Element
-var _ pipeline.Element = (*GeminiElement)(nil)
+// Make sure GeminiLiveElement implements pipeline.Element
+var _ pipeline.Element = (*GeminiLiveElement)(nil)
 
-// DefaultGeminiModel is the default model used by GeminiElement
-const DefaultGeminiModel = "gemini-2.5-flash-native-audio-preview-12-2025"
+// Deprecated: Use GeminiLiveElement, GeminiLiveConfig, etc. instead
+type GeminiElement = GeminiLiveElement
+type GeminiConfig = GeminiLiveConfig
+const DefaultGeminiModel = DefaultGeminiLiveModel
 
-// GeminiConfig holds configuration for GeminiElement
-type GeminiConfig struct {
+// Deprecated: Use NewGeminiLiveElement instead
+func NewGeminiElement() *GeminiLiveElement {
+	return NewGeminiLiveElement()
+}
+
+// Deprecated: Use NewGeminiLiveElementWithConfig instead
+func NewGeminiElementWithConfig(cfg GeminiLiveConfig) *GeminiLiveElement {
+	return NewGeminiLiveElementWithConfig(cfg)
+}
+
+// Deprecated: Use DefaultGeminiLiveConfig instead
+func DefaultGeminiConfig() GeminiLiveConfig {
+	return DefaultGeminiLiveConfig()
+}
+
+// DefaultGeminiLiveModel is the default model used by GeminiLiveElement
+const DefaultGeminiLiveModel = "gemini-2.5-flash-native-audio-preview-12-2025"
+
+// GeminiLiveConfig holds configuration for GeminiLiveElement
+type GeminiLiveConfig struct {
 	// Model is the Gemini model to use (default: gemini-2.5-flash-native-audio-preview-12-2025)
 	Model string
 	// APIKey is the Google API key (default: from GOOGLE_API_KEY env)
 	APIKey string
 }
 
-// DefaultGeminiConfig returns the default configuration
-func DefaultGeminiConfig() GeminiConfig {
-	return GeminiConfig{
-		Model:  DefaultGeminiModel,
+// DefaultGeminiLiveConfig returns the default configuration
+func DefaultGeminiLiveConfig() GeminiLiveConfig {
+	return GeminiLiveConfig{
+		Model:  DefaultGeminiLiveModel,
 		APIKey: os.Getenv("GOOGLE_API_KEY"),
 	}
 }
 
-type GeminiElement struct {
+type GeminiLiveElement struct {
 	*pipeline.BaseElement
 
 	model     string
@@ -52,18 +72,18 @@ type GeminiElement struct {
 	wg     sync.WaitGroup
 }
 
-// NewGeminiElement creates a new GeminiElement with default configuration
-func NewGeminiElement() *GeminiElement {
-	return NewGeminiElementWithConfig(DefaultGeminiConfig())
+// NewGeminiLiveElement creates a new GeminiLiveElement with default configuration
+func NewGeminiLiveElement() *GeminiLiveElement {
+	return NewGeminiLiveElementWithConfig(DefaultGeminiLiveConfig())
 }
 
-// NewGeminiElementWithConfig creates a new GeminiElement with custom configuration
-func NewGeminiElementWithConfig(cfg GeminiConfig) *GeminiElement {
+// NewGeminiLiveElementWithConfig creates a new GeminiLiveElement with custom configuration
+func NewGeminiLiveElementWithConfig(cfg GeminiLiveConfig) *GeminiLiveElement {
 	var dumper *audio.Dumper
 	var err error
 
 	if os.Getenv("DUMP_GEMINI_INPUT") == "true" {
-		dumper, err = audio.NewDumper("gemini_input", 16000, 1)
+		dumper, err = audio.NewDumper("gemini_live_input", 16000, 1)
 		if err != nil {
 			log.Printf("create audio dumper error: %v", err)
 		}
@@ -71,7 +91,7 @@ func NewGeminiElementWithConfig(cfg GeminiConfig) *GeminiElement {
 
 	model := cfg.Model
 	if model == "" {
-		model = DefaultGeminiModel
+		model = DefaultGeminiLiveModel
 	}
 
 	apiKey := cfg.APIKey
@@ -79,8 +99,8 @@ func NewGeminiElementWithConfig(cfg GeminiConfig) *GeminiElement {
 		apiKey = os.Getenv("GOOGLE_API_KEY")
 	}
 
-	return &GeminiElement{
-		BaseElement: pipeline.NewBaseElement("gemini-element", 100),
+	return &GeminiLiveElement{
+		BaseElement: pipeline.NewBaseElement("gemini-live-element", 100),
 		model:       model,
 		apiKey:      apiKey,
 		dumper:      dumper,
@@ -89,7 +109,7 @@ func NewGeminiElementWithConfig(cfg GeminiConfig) *GeminiElement {
 
 // Implement Element interface
 
-func (e *GeminiElement) Start(ctx context.Context) error {
+func (e *GeminiLiveElement) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	e.cancel = cancel
 
@@ -259,7 +279,7 @@ func (e *GeminiElement) Start(ctx context.Context) error {
 	return nil
 }
 
-func (e *GeminiElement) Stop() error {
+func (e *GeminiLiveElement) Stop() error {
 	if e.cancel != nil {
 		e.cancel()
 		e.wg.Wait()
@@ -278,7 +298,7 @@ func (e *GeminiElement) Stop() error {
 }
 
 // startNewResponse starts tracking a new response.
-func (e *GeminiElement) startNewResponse() {
+func (e *GeminiLiveElement) startNewResponse() {
 	e.currentResponseID = generateResponseID()
 	e.inResponse = true
 
@@ -293,7 +313,7 @@ func (e *GeminiElement) startNewResponse() {
 }
 
 // endCurrentResponse ends the current response.
-func (e *GeminiElement) endCurrentResponse(reason string) {
+func (e *GeminiLiveElement) endCurrentResponse(reason string) {
 	if !e.inResponse {
 		return
 	}

@@ -43,8 +43,8 @@ func DefaultWebRTCRealtimeConfig() *WebRTCRealtimeConfig {
 	return &WebRTCRealtimeConfig{
 		RTCUDPPort:    9000,
 		ICELite:       true,
-		DefaultModel:  "gemini-2.0-flash",
-		AllowedModels: []string{"gemini-2.0-flash", "gemini-1.5-pro"},
+		DefaultModel:  "gemini-2.5-flash-native-audio-preview-12-2025",
+		AllowedModels: []string{"gemini-2.0-flash", "gemini-2.5-flash-native-audio-preview-12-2025"},
 	}
 }
 
