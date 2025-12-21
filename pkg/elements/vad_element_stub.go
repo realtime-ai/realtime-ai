@@ -25,6 +25,7 @@ type VADEventPayload struct {
 	SessionID  string
 	Confidence float32
 	Timestamp  time.Time
+	AudioMs    int
 }
 
 // SileroVADConfig holds configuration for Silero VAD

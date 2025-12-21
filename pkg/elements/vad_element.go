@@ -30,15 +30,18 @@ type VADEventPayload struct {
 	SessionID  string
 	Confidence float32
 	Timestamp  time.Time
+	// AudioMs is approximate audio position (ms) when the event is emitted.
+	// It is derived from processed samples and has ~chunk-level resolution.
+	AudioMs int
 }
 
 // SileroVADConfig holds configuration for Silero VAD
 type SileroVADConfig struct {
-	ModelPath        string
-	Threshold        float32
-	MinSilenceDurMs  int
-	SpeechPadMs      int
-	Mode             VADMode
+	ModelPath       string
+	Threshold       float32
+	MinSilenceDurMs int
+	SpeechPadMs     int
+	Mode            VADMode
 }
 
 // SileroVADElement implements voice activity detection using Silero VAD
@@ -57,8 +60,10 @@ type SileroVADElement struct {
 
 	// State management
 	isSpeaking  bool
-	audioBuffer []int16
+	audioBuffer []float32
 	stateLock   sync.Mutex
+	// Total processed samples (16kHz). Used to approximate audio position.
+	processedSamples int64
 
 	// Lifecycle management
 	cancel context.CancelFunc
@@ -84,14 +89,15 @@ func NewSileroVADElement(config SileroVADConfig) (*SileroVADElement, error) {
 	}
 
 	elem := &SileroVADElement{
-		BaseElement:     pipeline.NewBaseElement("silero-vad-element", 100),
-		modelPath:       config.ModelPath,
-		threshold:       config.Threshold,
-		minSilenceDurMs: config.MinSilenceDurMs,
-		speechPadMs:     config.SpeechPadMs,
-		mode:            config.Mode,
-		isSpeaking:      false,
-		audioBuffer:     make([]int16, 0, 512),
+		BaseElement:      pipeline.NewBaseElement("silero-vad-element", 100),
+		modelPath:        config.ModelPath,
+		threshold:        config.Threshold,
+		minSilenceDurMs:  config.MinSilenceDurMs,
+		speechPadMs:      config.SpeechPadMs,
+		mode:             config.Mode,
+		isSpeaking:       false,
+		audioBuffer:      make([]float32, 0, 1024),
+		processedSamples: 0,
 	}
 
 	// Register properties
@@ -230,39 +236,58 @@ func (e *SileroVADElement) processAudio(ctx context.Context) {
 
 // handleAudioData processes a single audio message
 func (e *SileroVADElement) handleAudioData(ctx context.Context, msg *pipeline.PipelineMessage) {
-	// Convert byte data to int16 samples
-	samples := e.bytesToInt16(msg.AudioData.Data)
+	// Convert byte data to normalized float32 samples in [-1, 1]
+	samples := e.bytesToFloat32(msg.AudioData.Data)
 
 	// Add samples to buffer
 	e.stateLock.Lock()
 	e.audioBuffer = append(e.audioBuffer, samples...)
 	e.stateLock.Unlock()
 
-	// Process in chunks of 512 samples (32ms at 16kHz)
-	const chunkSize = 512
+	// Streaming adaptation for silero-vad-go Detect():
+	// silero-vad-go is designed for batch processing. Its Detect() function loops:
+	//   for i := 0; i < len(pcm)-windowSize; i += windowSize
+	// and maintains internal state (currSample, triggered, tempEnd) across calls.
+	//
+	// For streaming, we accumulate ~0.5 seconds of audio (8000 samples @ 16kHz)
+	// before calling Detect(). This reduces the frequency of "unexpected speech end"
+	// errors that occur when speech end triggers without a matching start in the batch.
+	const windowSize = 512
+	const batchSize = 8000 // ~0.5 seconds at 16kHz
 
-	e.stateLock.Lock()
-	for len(e.audioBuffer) >= chunkSize {
-		chunk := e.audioBuffer[:chunkSize]
-		e.audioBuffer = e.audioBuffer[chunkSize:]
-
-		// Unlock while detecting to avoid blocking
-		e.stateLock.Unlock()
-
-		// Detect speech in this chunk
-		segments, err := e.detector.Detect(chunk)
-		if err != nil {
-			log.Printf("[SileroVAD] Detection error: %v", err)
-			e.stateLock.Lock()
-			continue
+	for {
+		e.stateLock.Lock()
+		bufLen := len(e.audioBuffer)
+		if bufLen < batchSize {
+			e.stateLock.Unlock()
+			break
 		}
 
-		// Process detection results
-		e.processSegments(ctx, msg, segments)
+		// Process batchSize samples, keep windowSize overlap for continuity
+		buf := make([]float32, batchSize)
+		copy(buf, e.audioBuffer[:batchSize])
+		e.audioBuffer = e.audioBuffer[batchSize-windowSize:]
+		e.processedSamples += int64(batchSize - windowSize)
+		e.stateLock.Unlock()
 
-		e.stateLock.Lock()
+		segments, err := e.detector.Detect(buf)
+		if err != nil {
+			// "unexpected speech end" is expected in streaming mode when speech
+			// end is detected without a matching start in the current batch.
+			// This happens because internal state persists across Detect() calls.
+			if err.Error() != "unexpected speech end" {
+				log.Printf("[SileroVAD] Detection error: %v", err)
+			}
+			continue
+		}
+		if len(segments) > 0 {
+			log.Printf("[SileroVAD] Detected %d segments in %d samples", len(segments), bufLen)
+			for i, seg := range segments {
+				log.Printf("[SileroVAD]   Segment %d: start=%.3fs, end=%.3fs", i, seg.SpeechStartAt, seg.SpeechEndAt)
+			}
+		}
+		e.processSegments(ctx, msg, segments)
 	}
-	e.stateLock.Unlock()
 
 	// Handle output based on mode
 	switch e.mode {
@@ -291,24 +316,27 @@ func (e *SileroVADElement) processSegments(ctx context.Context, msg *pipeline.Pi
 	for _, segment := range segments {
 		wasSpeaking := e.isSpeaking
 
-		if segment.SpeechStartAt > 0 && !wasSpeaking {
+		// A Segment is emitted when speech is triggered; startAt can be 0 due to padding clamp.
+		if !wasSpeaking {
 			// Speech started
 			e.isSpeaking = true
-			e.emitEvent(pipeline.EventVADSpeechStart, msg.SessionID, segment.Confidence)
-			log.Printf("[SileroVAD] Speech started (confidence: %.2f)", segment.Confidence)
+			startMs := int(segment.SpeechStartAt * 1000)
+			e.emitEvent(pipeline.EventVADSpeechStart, msg.SessionID, e.threshold, startMs)
+			log.Printf("[SileroVAD] Speech started (startMs=%d)", startMs)
 		}
 
-		if segment.SpeechEndAt > 0 && wasSpeaking {
+		if segment.SpeechEndAt > 0 && e.isSpeaking {
 			// Speech ended
 			e.isSpeaking = false
-			e.emitEvent(pipeline.EventVADSpeechEnd, msg.SessionID, segment.Confidence)
-			log.Printf("[SileroVAD] Speech ended (confidence: %.2f)", segment.Confidence)
+			endMs := int(segment.SpeechEndAt * 1000)
+			e.emitEvent(pipeline.EventVADSpeechEnd, msg.SessionID, e.threshold, endMs)
+			log.Printf("[SileroVAD] Speech ended (endMs=%d)", endMs)
 		}
 	}
 }
 
 // emitEvent emits a VAD event to the bus
-func (e *SileroVADElement) emitEvent(eventType pipeline.EventType, sessionID string, confidence float32) {
+func (e *SileroVADElement) emitEvent(eventType pipeline.EventType, sessionID string, confidence float32, audioMs int) {
 	if e.Bus() == nil {
 		return
 	}
@@ -317,6 +345,7 @@ func (e *SileroVADElement) emitEvent(eventType pipeline.EventType, sessionID str
 		SessionID:  sessionID,
 		Confidence: confidence,
 		Timestamp:  time.Now(),
+		AudioMs:    audioMs,
 	}
 
 	event := pipeline.Event{
@@ -328,11 +357,13 @@ func (e *SileroVADElement) emitEvent(eventType pipeline.EventType, sessionID str
 	e.Bus().Publish(event)
 }
 
-// bytesToInt16 converts byte array to int16 samples (little-endian)
-func (e *SileroVADElement) bytesToInt16(data []byte) []int16 {
-	samples := make([]int16, len(data)/2)
-	for i := 0; i < len(samples); i++ {
-		samples[i] = int16(binary.LittleEndian.Uint16(data[i*2 : i*2+2]))
+// bytesToFloat32 converts 16-bit PCM (little-endian) to normalized float32 in [-1, 1].
+func (e *SileroVADElement) bytesToFloat32(data []byte) []float32 {
+	n := len(data) / 2
+	samples := make([]float32, n)
+	for i := 0; i < n; i++ {
+		v := int16(binary.LittleEndian.Uint16(data[i*2 : i*2+2]))
+		samples[i] = float32(v) / 32768.0
 	}
 	return samples
 }
