@@ -66,7 +66,7 @@ func (e *OpusDecodeElement) Start(ctx context.Context) error {
 					continue
 				}
 
-				if msg.AudioData.MediaType != "audio/x-opus" {
+				if msg.AudioData.MediaType != pipeline.AudioMediaTypeOpus {
 					continue
 				}
 
@@ -97,7 +97,7 @@ func (e *OpusDecodeElement) Start(ctx context.Context) error {
 					Timestamp: time.Now(),
 					AudioData: &pipeline.AudioData{
 						Data:       audioData,
-						MediaType:  "audio/x-raw",
+						MediaType:  pipeline.AudioMediaTypeRaw,
 						SampleRate: e.sampleRate,
 						Channels:   e.channels,
 						Timestamp:  time.Now(),

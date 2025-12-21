@@ -12,7 +12,6 @@ import (
 	"syscall"
 
 	"github.com/joho/godotenv"
-	"github.com/pion/webrtc/v4"
 	"github.com/realtime-ai/realtime-ai/pkg/connection"
 	"github.com/realtime-ai/realtime-ai/pkg/elements"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
@@ -23,16 +22,16 @@ import (
 type connectionEventHandler struct {
 	connection.ConnectionEventHandler
 
-	conn     connection.RTCConnection
+	conn     connection.Connection
 	pipeline *pipeline.Pipeline
 }
 
-func (c *connectionEventHandler) OnConnectionStateChange(state webrtc.PeerConnectionState) {
+func (c *connectionEventHandler) OnConnectionStateChange(state connection.ConnectionState) {
 	log.Printf("Connection state changed: %v", state)
 
-	if state == webrtc.PeerConnectionStateConnected {
+	if state == connection.ConnectionStateConnected {
 		log.Println("WebRTC connection established")
-	} else if state == webrtc.PeerConnectionStateFailed || state == webrtc.PeerConnectionStateClosed {
+	} else if state == connection.ConnectionStateFailed || state == connection.ConnectionStateClosed {
 		log.Println("WebRTC connection ended")
 		if c.pipeline != nil {
 			c.pipeline.Stop()
@@ -94,10 +93,10 @@ func main() {
 	}
 
 	// Create WebRTC server
-	rtcServer := server.NewRTCServer(cfg)
+	rtcServer := server.NewRealtimeServer(cfg)
 
 	// Set up connection handlers
-	rtcServer.OnConnectionCreated(func(ctx context.Context, conn connection.RTCConnection) {
+	rtcServer.OnConnectionCreated(func(ctx context.Context, conn connection.Connection) {
 		log.Printf("New connection created: %s", conn.PeerID())
 
 		// Create event handler
@@ -134,7 +133,7 @@ func main() {
 		log.Println("Pipeline started successfully")
 	})
 
-	rtcServer.OnConnectionError(func(ctx context.Context, conn connection.RTCConnection, err error) {
+	rtcServer.OnConnectionError(func(ctx context.Context, conn connection.Connection, err error) {
 		log.Printf("Connection error: %v", err)
 	})
 
@@ -185,7 +184,7 @@ func main() {
 
 // createInterpretationPipeline sets up the complete simultaneous interpretation pipeline
 func createInterpretationPipeline(
-	conn connection.RTCConnection,
+	conn connection.Connection,
 	sourceLang, targetLang string,
 	translateProvider, translateModel string,
 	ttsVoice string,
@@ -337,7 +336,7 @@ func createInterpretationPipeline(
 }
 
 // subscribeToEvents subscribes to pipeline events and forwards them to the client
-func subscribeToEvents(p *pipeline.Pipeline, conn connection.RTCConnection, enableSubtitles bool) {
+func subscribeToEvents(p *pipeline.Pipeline, conn connection.Connection, enableSubtitles bool) {
 	bus := p.Bus()
 	if bus == nil {
 		return
@@ -402,8 +401,8 @@ func subscribeToEvents(p *pipeline.Pipeline, conn connection.RTCConnection, enab
 	}()
 }
 
-// sendEventToClient sends an event to the WebRTC client
-func sendEventToClient(conn connection.RTCConnection, eventType string, data map[string]interface{}) {
+// sendEventToClient sends an event to the client
+func sendEventToClient(conn connection.Connection, eventType string, data map[string]interface{}) {
 	// Create event structure
 	event := map[string]interface{}{
 		"event": eventType,
@@ -429,7 +428,7 @@ func sendEventToClient(conn connection.RTCConnection, eventType string, data map
 }
 
 // handlePipelineOutput processes pipeline output and sends it back to the client
-func handlePipelineOutput(conn connection.RTCConnection, p *pipeline.Pipeline) {
+func handlePipelineOutput(conn connection.Connection, p *pipeline.Pipeline) {
 	for {
 		msg := p.Pull()
 		if msg == nil {

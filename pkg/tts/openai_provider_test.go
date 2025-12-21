@@ -111,11 +111,11 @@ func TestOpenAITTSProvider_GetAudioFormat(t *testing.T) {
 		expectedRate  int
 		expectedEnc   string
 	}{
-		{"pcm", "audio/pcm", 24000, "pcm_s16le"},
-		{"opus", "audio/opus", 24000, "opus"},
-		{"mp3", "audio/mpeg", 24000, "mp3"},
-		{"wav", "audio/wav", 24000, "wav"},
-		{"unknown", "audio/pcm", 24000, "pcm_s16le"}, // defaults to PCM
+		{"pcm", pipeline.AudioMediaTypePCM, 24000, "pcm_s16le"},
+		{"opus", pipeline.AudioMediaTypeOpusStandard, 24000, "opus"},
+		{"mp3", pipeline.AudioMediaTypeMPEG, 24000, "mp3"},
+		{"wav", pipeline.AudioMediaTypeWAV, 24000, "wav"},
+		{"unknown", pipeline.AudioMediaTypePCM, 24000, "pcm_s16le"}, // defaults to PCM
 	}
 
 	for _, tt := range tests {

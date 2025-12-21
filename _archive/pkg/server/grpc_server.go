@@ -29,14 +29,14 @@ type GRPCServer struct {
 	config *GRPCServerConfig
 
 	// Active connections
-	connections map[string]connection.RTCConnection
+	connections map[string]connection.Connection
 
 	// gRPC server instance
 	grpcServer *grpc.Server
 
 	// Callbacks
-	onConnectionCreated func(ctx context.Context, conn connection.RTCConnection)
-	onConnectionError   func(ctx context.Context, conn connection.RTCConnection, err error)
+	onConnectionCreated func(ctx context.Context, conn connection.Connection)
+	onConnectionError   func(ctx context.Context, conn connection.Connection, err error)
 
 	// Session management
 	sessions map[string]*sessionInfo
@@ -57,24 +57,24 @@ func NewGRPCServer(cfg *GRPCServerConfig) *GRPCServer {
 
 	return &GRPCServer{
 		config:      cfg,
-		connections: make(map[string]connection.RTCConnection),
+		connections: make(map[string]connection.Connection),
 		sessions:    make(map[string]*sessionInfo),
-		onConnectionCreated: func(ctx context.Context, conn connection.RTCConnection) {
+		onConnectionCreated: func(ctx context.Context, conn connection.Connection) {
 			log.Printf("[GRPCServer] Connection created (default handler): %s", conn.PeerID())
 		},
-		onConnectionError: func(ctx context.Context, conn connection.RTCConnection, err error) {
+		onConnectionError: func(ctx context.Context, conn connection.Connection, err error) {
 			log.Printf("[GRPCServer] Connection error (default handler): %s, error: %v", conn.PeerID(), err)
 		},
 	}
 }
 
-// OnConnectionCreated registers a callback for when a new connection is created
-func (s *GRPCServer) OnConnectionCreated(f func(ctx context.Context, conn connection.RTCConnection)) {
+// OnConnectionCreated registers a callback for when a new connection is created.
+func (s *GRPCServer) OnConnectionCreated(f func(ctx context.Context, conn connection.Connection)) {
 	s.onConnectionCreated = f
 }
 
-// OnConnectionError registers a callback for connection errors
-func (s *GRPCServer) OnConnectionError(f func(ctx context.Context, conn connection.RTCConnection, err error)) {
+// OnConnectionError registers a callback for connection errors.
+func (s *GRPCServer) OnConnectionError(f func(ctx context.Context, conn connection.Connection, err error)) {
 	s.onConnectionError = f
 }
 
@@ -109,7 +109,7 @@ func (s *GRPCServer) Stop() {
 			log.Printf("[GRPCServer] Closing connection: %s", id)
 			conn.Close()
 		}
-		s.connections = make(map[string]connection.RTCConnection)
+		s.connections = make(map[string]connection.Connection)
 		s.Unlock()
 	}
 }
@@ -198,8 +198,8 @@ func (s *GRPCServer) CloseSession(
 	}, nil
 }
 
-// GetConnection returns a connection by peer ID (utility method)
-func (s *GRPCServer) GetConnection(peerID string) (connection.RTCConnection, bool) {
+// GetConnection returns a connection by peer ID (utility method).
+func (s *GRPCServer) GetConnection(peerID string) (connection.Connection, bool) {
 	s.RLock()
 	defer s.RUnlock()
 	conn, exists := s.connections[peerID]

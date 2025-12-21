@@ -51,7 +51,7 @@ func main() {
 	whisperConfig := elements.WhisperSTTConfig{
 		APIKey:               apiKey,
 		Language:             "",
-		Model:                "whisper-1",
+		Model:                "whisper-large-v3-turbo",
 		EnablePartialResults: true,
 		VADEnabled:           false,
 		SampleRate:           audioSampleRate,

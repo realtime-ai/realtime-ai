@@ -14,40 +14,48 @@ import (
 	"github.com/realtime-ai/realtime-ai/pkg/connection"
 )
 
-type RTCServer struct {
+// BasicWebRTCServer is a simple WebRTC server without Realtime API protocol.
+// For Realtime API support, use WebRTCRealtimeServer or WebSocketRealtimeServer.
+type BasicWebRTCServer struct {
 	sync.RWMutex
 
-	config  *ServerConfig
-	peers   map[string]connection.RTCConnection
+	config  *BasicWebRTCConfig
+	peers   map[string]connection.Connection
 	api     *webrtc.API
 	handler ServerEventHandler
 
-	onConnectionCreated func(ctx context.Context, conn connection.RTCConnection)
-	onConnectionError   func(ctx context.Context, conn connection.RTCConnection, err error)
+	onConnectionCreated func(ctx context.Context, conn connection.Connection)
+	onConnectionError   func(ctx context.Context, conn connection.Connection, err error)
 }
 
-func NewRTCServer(cfg *ServerConfig) *RTCServer {
-	return &RTCServer{
+// NewBasicWebRTCServer creates a new BasicWebRTCServer.
+func NewBasicWebRTCServer(cfg *BasicWebRTCConfig) *BasicWebRTCServer {
+	return &BasicWebRTCServer{
 		config:              cfg,
-		onConnectionCreated: func(ctx context.Context, conn connection.RTCConnection) {},
-		onConnectionError:   func(ctx context.Context, conn connection.RTCConnection, err error) {},
-		peers:               make(map[string]connection.RTCConnection),
+		onConnectionCreated: func(ctx context.Context, conn connection.Connection) {},
+		onConnectionError:   func(ctx context.Context, conn connection.Connection, err error) {},
+		peers:               make(map[string]connection.Connection),
 	}
 }
 
-func (s *RTCServer) RegisterEventHandler(handler ServerEventHandler) {
+// Deprecated: NewRealtimeServer is deprecated. Use NewBasicWebRTCServer instead.
+func NewRealtimeServer(cfg *BasicWebRTCConfig) *BasicWebRTCServer {
+	return NewBasicWebRTCServer(cfg)
+}
+
+func (s *BasicWebRTCServer) RegisterEventHandler(handler ServerEventHandler) {
 	s.handler = handler
 }
 
-func (s *RTCServer) OnConnectionCreated(f func(ctx context.Context, conn connection.RTCConnection)) {
+func (s *BasicWebRTCServer) OnConnectionCreated(f func(ctx context.Context, conn connection.Connection)) {
 	s.onConnectionCreated = f
 }
 
-func (s *RTCServer) OnConnectionError(f func(ctx context.Context, conn connection.RTCConnection, err error)) {
+func (s *BasicWebRTCServer) OnConnectionError(f func(ctx context.Context, conn connection.Connection, err error)) {
 	s.onConnectionError = f
 }
 
-func (s *RTCServer) Start() error {
+func (s *BasicWebRTCServer) Start() error {
 
 	settingEngine := webrtc.SettingEngine{}
 	if s.config.ICELite {
@@ -71,7 +79,7 @@ func (s *RTCServer) Start() error {
 	})
 
 	if err != nil {
-		fmt.Printf("监听 UDP 端口失败: %v\n", err)
+		fmt.Printf("Failed to listen on UDP port: %v\n", err)
 		return err
 	}
 
@@ -86,13 +94,13 @@ func (s *RTCServer) Start() error {
 
 }
 
-// HandleNegotiate 处理 /session 路由
-func (s *RTCServer) HandleNegotiate(w http.ResponseWriter, r *http.Request) {
+// HandleNegotiate handles the /session WebRTC negotiation endpoint.
+func (s *BasicWebRTCServer) HandleNegotiate(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-	// 处理 OPTIONS 请求
+	// Handle OPTIONS request for CORS preflight
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
 		return
@@ -116,7 +124,7 @@ func (s *RTCServer) HandleNegotiate(w http.ResponseWriter, r *http.Request) {
 
 	ctx := context.Background()
 
-	// 创建 PeerConnection
+	// Create PeerConnection
 	pc, err := s.api.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{},
 	})
@@ -128,39 +136,39 @@ func (s *RTCServer) HandleNegotiate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	peerID := uuid.New().String()
-	rtcConnection := connection.NewRTCConnection(peerID, pc)
+	webrtcConn := connection.NewWebRTCConnection(peerID, pc)
 
 	s.Lock()
-	s.peers[peerID] = rtcConnection
+	s.peers[peerID] = webrtcConn
 	s.Unlock()
 
-	// 通知 Handler： PeerConnection 已经创建
-	s.onConnectionCreated(ctx, rtcConnection)
+	// Notify handler: connection created
+	s.onConnectionCreated(ctx, webrtcConn)
 
-	// 开始协商
+	// Start negotiation
 	if err := pc.SetRemoteDescription(offer); err != nil {
-		s.onConnectionError(ctx, rtcConnection, err)
+		s.onConnectionError(ctx, webrtcConn, err)
 		http.Error(w, "Failed to set remote description", http.StatusInternalServerError)
 		return
 	}
 
 	answer, err := pc.CreateAnswer(nil)
 	if err != nil {
-		s.onConnectionError(ctx, rtcConnection, err)
+		s.onConnectionError(ctx, webrtcConn, err)
 		http.Error(w, "Failed to create answer", http.StatusInternalServerError)
 		return
 	}
 	if err := pc.SetLocalDescription(answer); err != nil {
-		s.onConnectionError(ctx, rtcConnection, err)
+		s.onConnectionError(ctx, webrtcConn, err)
 		http.Error(w, "Failed to set local description", http.StatusInternalServerError)
 		return
 	}
 
-	// 等待 ICE gathering 完成
+	// Wait for ICE gathering to complete
 	gatherComplete := webrtc.GatheringCompletePromise(pc)
 	<-gatherComplete
 
-	// 返回给前端
+	// Return SDP answer to client
 	w.Header().Set("Content-Type", "application/sdp")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(pc.LocalDescription())

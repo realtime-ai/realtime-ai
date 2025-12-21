@@ -3,91 +3,110 @@ package audio
 import (
 	"log"
 	"sync"
-
-	"github.com/asticode/go-astiav"
 )
 
 const (
-	// 采样率
-	InputSampleRate  = 24000
-	OutputSampleRate = 48000
+	// 默认采样率
+	DefaultSampleRate = 48000
 	// 通道数
 	Channels = 1
 	// 每个采样点的字节数 (16-bit)
 	BytesPerSample = 2
-	// 24kHz下20ms对应的采样点数
-	SamplesPerFrame24kHz = InputSampleRate * 20 / 1000 // 480 samples
-	BytesPerFrame24kHz   = SamplesPerFrame24kHz * BytesPerSample * Channels
-	// 48kHz下20ms对应的采样点数
-	SamplesPerFrame48kHz = OutputSampleRate * 20 / 1000 // 960 samples
-	BytesPerFrame48kHz   = SamplesPerFrame48kHz * BytesPerSample * Channels
+	// 帧时长 (毫秒)
+	FrameDurationMs = 20
 )
 
-// AudioPacer 控制音频输出节奏，实现固定20ms间隔的音频帧输出，支持24kHz输入重采样到48kHz输出
+// AudioPacerConfig 配置
+type AudioPacerConfig struct {
+	SampleRate int // 采样率
+	Channels   int // 通道数
+}
+
+// DefaultAudioPacerConfig 返回默认配置
+func DefaultAudioPacerConfig() AudioPacerConfig {
+	return AudioPacerConfig{
+		SampleRate: DefaultSampleRate,
+		Channels:   Channels,
+	}
+}
+
+// AudioPacer 控制音频输出节奏，实现固定20ms间隔的音频帧输出
+// 只做缓冲和帧切分，不做重采样
 type AudioPacer struct {
 	buffer       []byte
 	mu           sync.Mutex
-	resampler    *Resample
 	accumulating bool // 是否正在积累数据
+
+	// 配置
+	sampleRate    int
+	channels      int
+	bytesPerFrame int
 }
 
-// NewAudioPacer 创建新的 AudioPacer
+// NewAudioPacer 创建新的 AudioPacer (使用默认配置)
 func NewAudioPacer() (*AudioPacer, error) {
-	resampler, err := NewResample(InputSampleRate, OutputSampleRate, astiav.ChannelLayoutMono, astiav.ChannelLayoutMono)
-	if err != nil {
-		return nil, err
+	return NewAudioPacerWithConfig(DefaultAudioPacerConfig())
+}
+
+// NewAudioPacerWithConfig 创建新的 AudioPacer (使用自定义配置)
+func NewAudioPacerWithConfig(cfg AudioPacerConfig) (*AudioPacer, error) {
+	if cfg.SampleRate <= 0 {
+		cfg.SampleRate = DefaultSampleRate
+	}
+	if cfg.Channels <= 0 {
+		cfg.Channels = Channels
 	}
 
+	// 计算每帧字节数: 采样率 * 帧时长(秒) * 通道数 * 每采样字节数
+	samplesPerFrame := cfg.SampleRate * FrameDurationMs / 1000
+	bytesPerFrame := samplesPerFrame * BytesPerSample * cfg.Channels
+
 	return &AudioPacer{
-		buffer:       make([]byte, 0, BytesPerFrame48kHz*100), // 预分配2秒的容量
-		resampler:    resampler,
-		accumulating: false,
+		buffer:        make([]byte, 0, bytesPerFrame*100), // 预分配2秒的容量
+		accumulating:  false,
+		sampleRate:    cfg.SampleRate,
+		channels:      cfg.Channels,
+		bytesPerFrame: bytesPerFrame,
 	}, nil
 }
 
-// Write 写入24kHz采样率的音频数据
+// Write 写入 PCM 音频数据
 func (ap *AudioPacer) Write(data []byte) error {
 	if len(data) == 0 {
 		return nil
 	}
 
-	// 重采样到48kHz
-	resampledData, err := ap.resampler.Resample(data)
-	if err != nil {
-		return err
-	}
-
 	ap.mu.Lock()
 	defer ap.mu.Unlock()
-	ap.buffer = append(ap.buffer, resampledData...)
+	ap.buffer = append(ap.buffer, data...)
 	return nil
 }
 
-// ReadFrame 读取固定20ms的48kHz音频帧
+// ReadFrame 读取固定20ms的音频帧
 // 如果没有足够的数据，将返回静音数据
 func (ap *AudioPacer) ReadFrame() []byte {
 	ap.mu.Lock()
 	defer ap.mu.Unlock()
 
 	// 准备输出缓冲区
-	frame := make([]byte, BytesPerFrame48kHz)
+	frame := make([]byte, ap.bytesPerFrame)
 
-	// 如果正在积累数据且缓冲区小于100ms，返回静音
-	if ap.accumulating && len(ap.buffer) < BytesPerFrame48kHz*10 { // 10帧 = 200ms
+	// 如果正在积累数据且缓冲区小于200ms，返回静音
+	if ap.accumulating && len(ap.buffer) < ap.bytesPerFrame*10 { // 10帧 = 200ms
 		return frame
 	}
 
 	// 如果有足够数据，关闭积累状态
-	if ap.accumulating && len(ap.buffer) >= BytesPerFrame48kHz*10 {
+	if ap.accumulating && len(ap.buffer) >= ap.bytesPerFrame*10 {
 		ap.accumulating = false
 		log.Printf("accumulated enough data (%d bytes), starting playback", len(ap.buffer))
 	}
 
-	if len(ap.buffer) >= BytesPerFrame48kHz {
+	if len(ap.buffer) >= ap.bytesPerFrame {
 		// 有足够的数据，复制一帧
-		copy(frame, ap.buffer[:BytesPerFrame48kHz])
+		copy(frame, ap.buffer[:ap.bytesPerFrame])
 		// 移除已读取的数据
-		ap.buffer = ap.buffer[BytesPerFrame48kHz:]
+		ap.buffer = ap.buffer[ap.bytesPerFrame:]
 	} else if len(ap.buffer) > 0 {
 		// 有部分数据，复制可用部分，其余填充静音
 		copy(frame, ap.buffer)
@@ -115,13 +134,19 @@ func (ap *AudioPacer) Available() int {
 	return len(ap.buffer)
 }
 
+// BytesPerFrame 返回每帧字节数
+func (ap *AudioPacer) BytesPerFrame() int {
+	return ap.bytesPerFrame
+}
+
+// SampleRate 返回采样率
+func (ap *AudioPacer) SampleRate() int {
+	return ap.sampleRate
+}
+
 // Close 释放资源
 func (ap *AudioPacer) Close() {
 	ap.mu.Lock()
 	defer ap.mu.Unlock()
-	if ap.resampler != nil {
-		ap.resampler.Free()
-		ap.resampler = nil
-	}
 	ap.buffer = nil
 }

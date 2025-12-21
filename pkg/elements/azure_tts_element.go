@@ -135,7 +135,7 @@ func (e *AzureTTSElement) Synthesize(ctx context.Context, text string) error {
 			Data:       audioData,
 			SampleRate: e.sampleRate,
 			Channels:   e.channels,
-			MediaType:  "audio/x-raw",
+			MediaType:  pipeline.AudioMediaTypeRaw,
 			Timestamp:  time.Now(),
 		},
 	}

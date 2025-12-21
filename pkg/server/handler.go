@@ -7,17 +7,17 @@ import (
 )
 
 type ServerEventHandler interface {
-	// 当 PeerConnection 创建完成，传入封装好的 wrapper
-	OnConnectionCreated(ctx context.Context, conn connection.RTCConnection)
+	// OnConnectionCreated is called when a connection is established.
+	OnConnectionCreated(ctx context.Context, conn connection.Connection)
 
-	// 当 PeerConnection 创建或协商过程中出错
+	// OnConnectionError is called when a connection error occurs.
 	OnConnectionError(ctx context.Context, peerID string, err error)
 }
 
-// NoOpConnectionEventHandler 一个空实现，方便不想实现所有方法的场景
+// NoOpServerEventHandler is a no-op implementation of ServerEventHandler.
 type NoOpServerEventHandler struct{}
 
-func (h *NoOpServerEventHandler) OnConnectionCreated(ctx context.Context, conn connection.RTCConnection) {
+func (h *NoOpServerEventHandler) OnConnectionCreated(ctx context.Context, conn connection.Connection) {
 }
 
 func (h *NoOpServerEventHandler) OnConnectionError(ctx context.Context, peerID string, err error) {

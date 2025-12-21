@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qwen Realtime STT Demo</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #121212 0%, #1e1e1e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.2rem;
+            color: #fff;
+        }
+        .subtitle {
+            text-align: center;
+            color: #aaa;
+            margin-bottom: 30px;
+            font-size: 1rem;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        .card h2 {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            color: #4f46e5;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+        }
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #444;
+        }
+        .status-dot.connected {
+            background: #10b981;
+            box-shadow: 0 0 12px #10b981;
+        }
+        .status-dot.connecting {
+            background: #f59e0b;
+            animation: pulse 1.5s infinite;
+        }
+        .status-dot.error {
+            background: #ef4444;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.1); }
+        }
+        .btn {
+            padding: 12px 28px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-primary {
+            background: #4f46e5;
+            color: #fff;
+        }
+        .btn-primary:hover {
+            background: #4338ca;
+            transform: translateY(-1px);
+        }
+        .btn-danger {
+            background: #dc2626;
+            color: #fff;
+        }
+        .btn-danger:hover {
+            background: #b91c1c;
+            transform: translateY(-1px);
+        }
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+        .transcription-container {
+            background: #000;
+            border-radius: 12px;
+            padding: 20px;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #333;
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+        .partial {
+            color: #888;
+            font-style: italic;
+        }
+        .final {
+            color: #fff;
+            margin-bottom: 10px;
+            display: block;
+            border-left: 3px solid #4f46e5;
+            padding-left: 12px;
+        }
+        .controls {
+            display: flex;
+            gap: 15px;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .info-item {
+            background: rgba(255,255,255,0.03);
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .info-label {
+            font-size: 0.75rem;
+            color: #666;
+            text-transform: uppercase;
+            display: block;
+            margin-bottom: 4px;
+        }
+        .info-value {
+            font-weight: 500;
+            color: #ccc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Qwen Realtime STT</h1>
+        <p class="subtitle">Streaming ASR with WebRTC & WebSocket</p>
+
+        <div class="card">
+            <h2>Session Control</h2>
+            <div class="status">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Disconnected</span>
+                <span id="sessionId" style="margin-left: auto; color: #666; font-size: 0.85rem; font-family: monospace;"></span>
+            </div>
+            <div class="controls">
+                <button class="btn btn-primary" id="connectBtn" onclick="connect()">Start Listening</button>
+                <button class="btn btn-danger" id="disconnectBtn" onclick="disconnect()" disabled>Stop</button>
+            </div>
+            
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Sample Rate</span>
+                    <span class="info-value">48kHz → 16kHz</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Model</span>
+                    <span class="info-value">Qwen ASR Flash</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Latency</span>
+                    <span class="info-value" id="latencyValue">0ms</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Transcription</h2>
+            <div class="transcription-container" id="transcriptionBox">
+                <div id="history"></div>
+                <div id="current" class="partial"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let pc = null;
+        let dc = null;
+        let localStream = null;
+        let lastResultTime = null;
+
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const sessionIdEl = document.getElementById('sessionId');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const transcriptionBox = document.getElementById('transcriptionBox');
+        const historyEl = document.getElementById('history');
+        const currentEl = document.getElementById('current');
+        const latencyEl = document.getElementById('latencyValue');
+
+        function updateStatus(status, text) {
+            statusDot.className = 'status-dot ' + status;
+            statusText.textContent = text;
+        }
+
+        async function connect() {
+            try {
+                updateStatus('connecting', 'Initializing...');
+                connectBtn.disabled = true;
+
+                // Get user media (microphone)
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+
+                // Create RTCPeerConnection
+                pc = new RTCPeerConnection();
+
+                // Create DataChannel for receiving transcription results
+                dc = pc.createDataChannel('transcription');
+
+                dc.onopen = () => {
+                    updateStatus('connected', 'Listening...');
+                    console.log('DataChannel opened');
+                };
+
+                dc.onmessage = (event) => {
+                    let data = event.data;
+                    if (data instanceof ArrayBuffer) {
+                        data = new TextDecoder().decode(data);
+                    }
+                    
+                    try {
+                        const msg = JSON.parse(data);
+                        if (msg.type === 'data' && msg.text_data) {
+                            handleTranscription(msg.text_data);
+                        }
+                    } catch (e) {
+                        console.error('Failed to parse message:', e, data);
+                    }
+                };
+
+                // Add microphone track
+                localStream.getTracks().forEach(track => {
+                    pc.addTrack(track, localStream);
+                });
+
+                // Handle connection state
+                pc.onconnectionstatechange = () => {
+                    if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+                        disconnect();
+                    }
+                };
+
+                // Create and set local offer
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                // Wait for ICE gathering
+                await new Promise(r => {
+                    if (pc.iceGatheringState === 'complete') r();
+                    else pc.onicegatheringstatechange = () => pc.iceGatheringState === 'complete' && r();
+                });
+
+                // Negotiate with server
+                const response = await fetch('/session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(pc.localDescription)
+                });
+
+                if (!response.ok) throw new Error('Server error: ' + response.status);
+
+                const answer = await response.json();
+                sessionIdEl.textContent = answer.session_id;
+                await pc.setRemoteDescription(answer.sdp);
+
+                disconnectBtn.disabled = false;
+
+            } catch (err) {
+                console.error('Connection failed:', err);
+                updateStatus('error', err.message);
+                connectBtn.disabled = false;
+            }
+        }
+
+        function handleTranscription(textData) {
+            try {
+                // Decode base64 to Uint8Array then to UTF-8 string
+                const binaryString = atob(textData.data);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                const utf8Text = new TextDecoder().decode(bytes);
+
+                if (textData.text_type === 'text/final') {
+                    const finalMsg = document.createElement('span');
+                    finalMsg.className = 'final';
+                    finalMsg.textContent = utf8Text;
+                    historyEl.appendChild(finalMsg);
+                    currentEl.textContent = '';
+                    
+                    // Update latency if we have timestamp
+                    if (textData.timestamp) {
+                        const now = Date.now();
+                        const serverTime = new Date(textData.timestamp).getTime();
+                        latencyEl.textContent = Math.max(0, now - serverTime) + 'ms';
+                    }
+                } else {
+                    currentEl.textContent = utf8Text;
+                }
+                
+                transcriptionBox.scrollTop = transcriptionBox.scrollHeight;
+            } catch (e) {
+                console.error('Error decoding transcription:', e);
+            }
+        }
+
+        function disconnect() {
+            if (pc) pc.close();
+            if (localStream) localStream.getTracks().forEach(t => t.stop());
+            
+            pc = null;
+            dc = null;
+            localStream = null;
+            
+            updateStatus('', 'Disconnected');
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+            sessionIdEl.textContent = '';
+        }
+    </script>
+</body>
+</html>
+

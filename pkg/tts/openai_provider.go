@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+
+	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 )
 
 const (
@@ -116,8 +118,18 @@ func (p *OpenAITTSProvider) Synthesize(ctx context.Context, req *SynthesizeReque
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
+	// Determine base URL
+	baseURL := openAITTSEndpoint
+	if envBaseURL := os.Getenv("OPENAI_BASE_URL"); envBaseURL != "" {
+		baseURL = envBaseURL
+		if baseURL[len(baseURL)-1] != '/' {
+			baseURL += "/"
+		}
+		baseURL += "audio/speech"
+	}
+
 	// Create HTTP request
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", openAITTSEndpoint, bytes.NewReader(payloadBytes))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL, bytes.NewReader(payloadBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -161,28 +173,28 @@ func (p *OpenAITTSProvider) getAudioFormat(format string) AudioFormat {
 		return AudioFormat{
 			SampleRate: openAIDefaultSampleRate,
 			Channels:   1,
-			MediaType:  "audio/pcm",
+			MediaType:  pipeline.AudioMediaTypePCM,
 			Encoding:   "pcm_s16le",
 		}
 	case "opus":
 		return AudioFormat{
 			SampleRate: 24000,
 			Channels:   1,
-			MediaType:  "audio/opus",
+			MediaType:  pipeline.AudioMediaTypeOpusStandard,
 			Encoding:   "opus",
 		}
 	case "mp3":
 		return AudioFormat{
 			SampleRate: 24000,
 			Channels:   1,
-			MediaType:  "audio/mpeg",
+			MediaType:  pipeline.AudioMediaTypeMPEG,
 			Encoding:   "mp3",
 		}
 	case "wav":
 		return AudioFormat{
 			SampleRate: 24000,
 			Channels:   1,
-			MediaType:  "audio/wav",
+			MediaType:  pipeline.AudioMediaTypeWAV,
 			Encoding:   "wav",
 		}
 	default:
@@ -190,7 +202,7 @@ func (p *OpenAITTSProvider) getAudioFormat(format string) AudioFormat {
 		return AudioFormat{
 			SampleRate: openAIDefaultSampleRate,
 			Channels:   1,
-			MediaType:  "audio/pcm",
+			MediaType:  pipeline.AudioMediaTypePCM,
 			Encoding:   "pcm_s16le",
 		}
 	}

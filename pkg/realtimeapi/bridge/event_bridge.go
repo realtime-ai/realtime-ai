@@ -31,10 +31,10 @@ type AudioSink interface {
 
 // EventBridge bridges Pipeline Bus events to WebSocket server events.
 type EventBridge struct {
-	bus             pipeline.Bus
-	sender          EventSender
-	tracker         *state.ResponseTracker
-	sessionID       string
+	bus       pipeline.Bus
+	sender    EventSender
+	tracker   *state.ResponseTracker
+	sessionID string
 
 	// AudioSink for RTP-based audio output (WebRTC mode)
 	audioSink AudioSink
@@ -93,7 +93,7 @@ func (eb *EventBridge) Start(ctx context.Context) error {
 	eb.bus.Subscribe(pipeline.EventInterrupted, eb.interruptedCh)
 	eb.bus.Subscribe(pipeline.EventResponseStart, eb.responseStartCh)
 	eb.bus.Subscribe(pipeline.EventResponseEnd, eb.responseEndCh)
-	eb.bus.Subscribe(pipeline.EventAudioDelta, eb.audioDeltaCh)
+	//eb.bus.Subscribe(pipeline.EventAudioDelta, eb.audioDeltaCh)
 	eb.bus.Subscribe(pipeline.EventTextDelta, eb.textDeltaCh)
 
 	// Start event handlers
@@ -115,7 +115,7 @@ func (eb *EventBridge) Stop() {
 	eb.bus.Unsubscribe(pipeline.EventInterrupted, eb.interruptedCh)
 	eb.bus.Unsubscribe(pipeline.EventResponseStart, eb.responseStartCh)
 	eb.bus.Unsubscribe(pipeline.EventResponseEnd, eb.responseEndCh)
-	eb.bus.Unsubscribe(pipeline.EventAudioDelta, eb.audioDeltaCh)
+	//eb.bus.Unsubscribe(pipeline.EventAudioDelta, eb.audioDeltaCh)
 	eb.bus.Unsubscribe(pipeline.EventTextDelta, eb.textDeltaCh)
 
 	eb.wg.Wait()

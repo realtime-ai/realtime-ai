@@ -63,7 +63,7 @@ func InstrumentElementProcess(ctx context.Context, elementName string, msg *pipe
 				msg.AudioData.SampleRate,
 				msg.AudioData.Channels,
 				len(msg.AudioData.Data),
-				msg.AudioData.MediaType,
+				string(msg.AudioData.MediaType),
 				msg.AudioData.Codec,
 			)...)
 		}
@@ -73,7 +73,7 @@ func InstrumentElementProcess(ctx context.Context, elementName string, msg *pipe
 				msg.VideoData.Width,
 				msg.VideoData.Height,
 				len(msg.VideoData.Data),
-				msg.VideoData.MediaType,
+				string(msg.VideoData.MediaType),
 				msg.VideoData.Codec,
 			)...)
 		}

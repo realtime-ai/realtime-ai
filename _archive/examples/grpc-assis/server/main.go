@@ -8,7 +8,6 @@ import (
 	"syscall"
 
 	"github.com/joho/godotenv"
-	"github.com/pion/webrtc/v4"
 	"github.com/realtime-ai/realtime-ai/pkg/connection"
 	"github.com/realtime-ai/realtime-ai/pkg/elements"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
@@ -18,14 +17,14 @@ import (
 type connectionEventHandler struct {
 	connection.ConnectionEventHandler
 
-	conn     connection.RTCConnection
+	conn     connection.Connection
 	pipeline *pipeline.Pipeline
 }
 
-func (c *connectionEventHandler) OnConnectionStateChange(state webrtc.PeerConnectionState) {
+func (c *connectionEventHandler) OnConnectionStateChange(state connection.ConnectionState) {
 	log.Printf("[Handler] OnConnectionStateChange: %v", state)
 
-	if state == webrtc.PeerConnectionStateConnected {
+	if state == connection.ConnectionStateConnected {
 		// Create pipeline elements
 		audioPacerSinkElement := elements.NewAudioPacerSinkElement()
 		geminiElement := elements.NewGeminiElement()
@@ -83,7 +82,7 @@ func StartGRPCServer(port int) error {
 	grpcServer := server.NewGRPCServer(cfg)
 
 	// Register callback for new connections
-	grpcServer.OnConnectionCreated(func(ctx context.Context, conn connection.RTCConnection) {
+	grpcServer.OnConnectionCreated(func(ctx context.Context, conn connection.Connection) {
 		log.Printf("[Server] New connection created: %s", conn.PeerID())
 		conn.RegisterEventHandler(&connectionEventHandler{
 			conn: conn,
@@ -91,7 +90,7 @@ func StartGRPCServer(port int) error {
 	})
 
 	// Register callback for connection errors
-	grpcServer.OnConnectionError(func(ctx context.Context, conn connection.RTCConnection, err error) {
+	grpcServer.OnConnectionError(func(ctx context.Context, conn connection.Connection, err error) {
 		log.Printf("[Server] Connection error: %s, error: %v", conn.PeerID(), err)
 	})
 

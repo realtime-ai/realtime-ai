@@ -4,6 +4,7 @@ package connection
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -163,16 +164,22 @@ func (c *webrtcRealtimeConnectionImpl) Start(ctx context.Context) error {
 		})
 	})
 
-	// Add bidirectional audio transceiver (same pattern as rtc_connection.go)
-	transceiver, err := c.pc.AddTransceiverFromKind(webrtc.RTPCodecTypeAudio, webrtc.RTPTransceiverInit{
-		Direction: webrtc.RTPTransceiverDirectionSendrecv,
-	})
+	// Create local audio track explicitly for sending audio
+	localAudioTrack, err := webrtc.NewTrackLocalStaticSample(
+		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus},
+		"audio",
+		"realtime-audio-"+c.sessionID,
+	)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create local audio track: %w", err)
 	}
+	c.localAudioTrack = localAudioTrack
 
-	// Get the local audio track from the transceiver sender
-	c.localAudioTrack = transceiver.Sender().Track().(*webrtc.TrackLocalStaticSample)
+	// Add the track to peer connection
+	_, err = c.pc.AddTrack(localAudioTrack)
+	if err != nil {
+		return fmt.Errorf("failed to add audio track: %w", err)
+	}
 
 	// Handle incoming audio track
 	c.pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
@@ -226,9 +233,17 @@ func (c *webrtcRealtimeConnectionImpl) readRemoteAudio(ctx context.Context) {
 			}
 
 			// Decode Opus to PCM
+			// Debug: check RTP packet payload
+			if len(rtpPacket.Payload) == 0 {
+				log.Printf("[webrtc-realtime %s] Warning: RTP packet has empty payload (PayloadType: %d, SSRC: %d)",
+					c.sessionID, rtpPacket.PayloadType, rtpPacket.SSRC)
+				continue
+			}
+
 			n, err := c.audioDecoder.Decode(rtpPacket.Payload, pcmBuf)
 			if err != nil {
-				log.Printf("[webrtc-realtime %s] Opus decode error: %v", c.sessionID, err)
+				log.Printf("[webrtc-realtime %s] Opus decode error: payload len=%d, error=%v",
+					c.sessionID, len(rtpPacket.Payload), err)
 				continue
 			}
 

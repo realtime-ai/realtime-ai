@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"io"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -28,7 +29,12 @@ func NewWhisperProvider(apiKey string) (*WhisperProvider, error) {
 		}
 	}
 
-	client := openai.NewClient(apiKey)
+	clientConfig := openai.DefaultConfig(apiKey)
+	if baseURL := os.Getenv("OPENAI_BASE_URL"); baseURL != "" {
+		clientConfig.BaseURL = baseURL
+		log.Printf("[Whisper STT] Using BaseURL: %s", clientConfig.BaseURL)
+	}
+	client := openai.NewClientWithConfig(clientConfig)
 
 	return &WhisperProvider{
 		client: client,

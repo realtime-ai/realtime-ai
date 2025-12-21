@@ -250,6 +250,9 @@
                     ordered: true
                 });
 
+                // Set binaryType to handle text messages properly
+                dc.binaryType = 'arraybuffer';
+
                 dc.onopen = () => {
                     logEvent('client', 'DataChannel opened', null);
                     // Send session.update after connection
@@ -263,9 +266,20 @@
                 };
 
                 dc.onmessage = (event) => {
-                    const serverEvent = JSON.parse(event.data);
-                    logEvent('server', serverEvent.type, serverEvent);
-                    handleServerEvent(serverEvent);
+                    let data = event.data;
+
+                    // If data is ArrayBuffer, decode it as UTF-8 text
+                    if (data instanceof ArrayBuffer) {
+                        data = new TextDecoder('utf-8').decode(data);
+                    }
+
+                    try {
+                        const serverEvent = JSON.parse(data);
+                        logEvent('server', serverEvent.type, serverEvent);
+                        handleServerEvent(serverEvent);
+                    } catch (e) {
+                        console.error('Failed to parse server event:', e, data);
+                    }
                 };
 
                 dc.onclose = () => {

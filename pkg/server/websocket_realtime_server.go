@@ -1,4 +1,5 @@
-package realtimeapi
+// Package server provides WebSocket server implementations for Realtime API.
+package server
 
 import (
 	"context"
@@ -6,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -13,15 +15,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
+	"github.com/realtime-ai/realtime-ai/pkg/realtimeapi"
 	"github.com/realtime-ai/realtime-ai/pkg/realtimeapi/bridge"
 	"github.com/realtime-ai/realtime-ai/pkg/realtimeapi/events"
 )
 
-// PipelineFactory creates a pipeline for a session.
-type PipelineFactory func(ctx context.Context, session *Session) (*pipeline.Pipeline, error)
+// WebSocketPipelineFactory creates a pipeline for a WebSocket session.
+type WebSocketPipelineFactory func(ctx context.Context, session *realtimeapi.Session) (*pipeline.Pipeline, error)
 
-// ServerConfig holds the configuration for the Realtime API server.
-type ServerConfig struct {
+// WebSocketRealtimeConfig holds the configuration for the WebSocket Realtime API server.
+type WebSocketRealtimeConfig struct {
 	// Addr is the address to listen on (e.g., ":8080").
 	Addr string
 
@@ -47,7 +50,7 @@ type ServerConfig struct {
 	SessionTimeout time.Duration
 
 	// DefaultSessionConfig is the default session configuration.
-	DefaultSessionConfig SessionConfig
+	DefaultSessionConfig realtimeapi.SessionConfig
 
 	// ReadBufferSize is the WebSocket read buffer size.
 	ReadBufferSize int
@@ -56,28 +59,28 @@ type ServerConfig struct {
 	WriteBufferSize int
 }
 
-// DefaultServerConfig returns the default server configuration.
-func DefaultServerConfig() ServerConfig {
-	return ServerConfig{
+// DefaultWebSocketRealtimeConfig returns the default server configuration.
+func DefaultWebSocketRealtimeConfig() *WebSocketRealtimeConfig {
+	return &WebSocketRealtimeConfig{
 		Addr:                 ":8080",
 		Path:                 "/v1/realtime",
 		DefaultModel:         "gemini-2.0-flash",
 		AllowedModels:        []string{"gemini-2.0-flash", "gpt-4o-realtime"},
 		MaxSessionsPerIP:     10,
 		SessionTimeout:       30 * time.Minute,
-		DefaultSessionConfig: DefaultSessionConfig(),
+		DefaultSessionConfig: realtimeapi.DefaultSessionConfig(),
 		ReadBufferSize:       4096,
 		WriteBufferSize:      4096,
 	}
 }
 
-// Server is the Realtime API WebSocket server.
-type Server struct {
-	config          ServerConfig
-	pipelineFactory PipelineFactory
+// WebSocketRealtimeServer is the Realtime API WebSocket server.
+type WebSocketRealtimeServer struct {
+	config          *WebSocketRealtimeConfig
+	pipelineFactory WebSocketPipelineFactory
 
 	// Session management
-	sessions   map[string]*Session
+	sessions   map[string]*realtimeapi.Session
 	sessionsMu sync.RWMutex
 
 	// IP-based session counting
@@ -96,13 +99,17 @@ type Server struct {
 	cancel context.CancelFunc
 }
 
-// NewServer creates a new Realtime API server.
-func NewServer(config ServerConfig) *Server {
+// NewWebSocketRealtimeServer creates a new WebSocket Realtime API server.
+func NewWebSocketRealtimeServer(config *WebSocketRealtimeConfig) *WebSocketRealtimeServer {
+	if config == nil {
+		config = DefaultWebSocketRealtimeConfig()
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
-	return &Server{
+	return &WebSocketRealtimeServer{
 		config:     config,
-		sessions:   make(map[string]*Session),
+		sessions:   make(map[string]*realtimeapi.Session),
 		ipSessions: make(map[string]int),
 		mux:        http.NewServeMux(),
 		upgrader: websocket.Upgrader{
@@ -118,18 +125,18 @@ func NewServer(config ServerConfig) *Server {
 }
 
 // SetPipelineFactory sets the pipeline factory for creating session pipelines.
-func (s *Server) SetPipelineFactory(factory PipelineFactory) {
+func (s *WebSocketRealtimeServer) SetPipelineFactory(factory WebSocketPipelineFactory) {
 	s.pipelineFactory = factory
 }
 
 // RegisterHandler registers an HTTP handler on the server's mux.
 // Must be called before Start().
-func (s *Server) RegisterHandler(pattern string, handler http.HandlerFunc) {
+func (s *WebSocketRealtimeServer) RegisterHandler(pattern string, handler http.HandlerFunc) {
 	s.mux.HandleFunc(pattern, handler)
 }
 
 // Start starts the server.
-func (s *Server) Start(ctx context.Context) error {
+func (s *WebSocketRealtimeServer) Start(ctx context.Context) error {
 	// Register WebSocket handler
 	s.mux.HandleFunc(s.config.Path, s.handleWebSocket)
 
@@ -138,7 +145,7 @@ func (s *Server) Start(ctx context.Context) error {
 		Handler: s.mux,
 	}
 
-	log.Printf("Realtime API server starting on %s%s", s.config.Addr, s.config.Path)
+	log.Printf("[WebSocketRealtimeServer] starting on %s%s", s.config.Addr, s.config.Path)
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -158,7 +165,7 @@ func (s *Server) Start(ctx context.Context) error {
 }
 
 // Stop stops the server gracefully.
-func (s *Server) Stop(ctx context.Context) error {
+func (s *WebSocketRealtimeServer) Stop(ctx context.Context) error {
 	s.cancel()
 
 	// Close all sessions
@@ -166,7 +173,7 @@ func (s *Server) Stop(ctx context.Context) error {
 	for _, session := range s.sessions {
 		session.Close()
 	}
-	s.sessions = make(map[string]*Session)
+	s.sessions = make(map[string]*realtimeapi.Session)
 	s.sessionsMu.Unlock()
 
 	// Shutdown HTTP server
@@ -177,7 +184,7 @@ func (s *Server) Stop(ctx context.Context) error {
 }
 
 // handleWebSocket handles WebSocket connections.
-func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+func (s *WebSocketRealtimeServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Authentication
 	if s.config.AuthToken != "" {
 		authHeader := r.Header.Get("Authorization")
@@ -220,7 +227,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Upgrade to WebSocket
 	conn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("WebSocket upgrade failed: %v", err)
+		log.Printf("[WebSocketRealtimeServer] WebSocket upgrade failed: %v", err)
 		return
 	}
 
@@ -228,13 +235,13 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	sessionConfig := s.config.DefaultSessionConfig
 	sessionConfig.Model = model
 
-	session := NewSession(s.ctx, conn, sessionConfig)
+	session := realtimeapi.NewSession(s.ctx, conn, sessionConfig)
 
 	// Register session
 	s.registerSession(session, clientIP)
 
 	// Set cleanup callback
-	session.SetOnClose(func(sess *Session) {
+	session.SetOnClose(func(sess *realtimeapi.Session) {
 		s.unregisterSession(sess, clientIP)
 	})
 
@@ -242,7 +249,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	if s.pipelineFactory != nil {
 		p, err := s.pipelineFactory(session.Context(), session)
 		if err != nil {
-			log.Printf("Failed to create pipeline: %v", err)
+			log.Printf("[WebSocketRealtimeServer] Failed to create pipeline: %v", err)
 			session.SendEvent(events.NewErrorEvent(
 				events.ErrorTypeServer,
 				"pipeline_creation_failed",
@@ -258,12 +265,12 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		eb := bridge.NewEventBridge(p.Bus(), session, session.ID)
 		session.SetEventBridge(eb)
 		if err := eb.Start(session.Context()); err != nil {
-			log.Printf("Failed to start event bridge: %v", err)
+			log.Printf("[WebSocketRealtimeServer] Failed to start event bridge: %v", err)
 		}
 
 		// Start pipeline
 		if err := p.Start(session.Context()); err != nil {
-			log.Printf("Failed to start pipeline: %v", err)
+			log.Printf("[WebSocketRealtimeServer] Failed to start pipeline: %v", err)
 			session.SendEvent(events.NewErrorEvent(
 				events.ErrorTypeServer,
 				"pipeline_start_failed",
@@ -280,17 +287,17 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	// Start session
 	if err := session.Start(); err != nil {
-		log.Printf("Failed to start session: %v", err)
+		log.Printf("[WebSocketRealtimeServer] Failed to start session: %v", err)
 		session.Close()
 		return
 	}
 
 	// Handle incoming messages
-	s.handleSession(session)
+	s.handleSession(session, conn)
 }
 
 // handleSession handles messages for a session.
-func (s *Server) handleSession(session *Session) {
+func (s *WebSocketRealtimeServer) handleSession(session *realtimeapi.Session, conn *websocket.Conn) {
 	defer session.Close()
 
 	for {
@@ -300,11 +307,11 @@ func (s *Server) handleSession(session *Session) {
 		default:
 		}
 
-		// Read message
-		_, data, err := session.conn.ReadMessage()
+		// Read message from WebSocket connection
+		_, data, err := conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("[session %s] WebSocket read error: %v", session.ID, err)
+				log.Printf("[WebSocketRealtimeServer] [session %s] WebSocket read error: %v", session.ID, err)
 			}
 			return
 		}
@@ -323,13 +330,13 @@ func (s *Server) handleSession(session *Session) {
 
 		// Handle event
 		if err := session.HandleClientEvent(event); err != nil {
-			log.Printf("[session %s] Event handling error: %v", session.ID, err)
+			log.Printf("[WebSocketRealtimeServer] [session %s] Event handling error: %v", session.ID, err)
 		}
 	}
 }
 
 // handlePipelineOutput handles output from the pipeline.
-func (s *Server) handlePipelineOutput(session *Session) {
+func (s *WebSocketRealtimeServer) handlePipelineOutput(session *realtimeapi.Session) {
 	p := session.GetPipeline()
 	if p == nil {
 		return
@@ -444,7 +451,7 @@ func (s *Server) handlePipelineOutput(session *Session) {
 }
 
 // registerSession adds a session to the server.
-func (s *Server) registerSession(session *Session, clientIP string) {
+func (s *WebSocketRealtimeServer) registerSession(session *realtimeapi.Session, clientIP string) {
 	s.sessionsMu.Lock()
 	s.sessions[session.ID] = session
 	s.sessionsMu.Unlock()
@@ -453,11 +460,11 @@ func (s *Server) registerSession(session *Session, clientIP string) {
 	s.ipSessions[clientIP]++
 	s.ipSessionsMu.Unlock()
 
-	log.Printf("[session %s] registered from %s", session.ID, clientIP)
+	log.Printf("[WebSocketRealtimeServer] [session %s] registered from %s", session.ID, clientIP)
 }
 
 // unregisterSession removes a session from the server.
-func (s *Server) unregisterSession(session *Session, clientIP string) {
+func (s *WebSocketRealtimeServer) unregisterSession(session *realtimeapi.Session, clientIP string) {
 	s.sessionsMu.Lock()
 	delete(s.sessions, session.ID)
 	s.sessionsMu.Unlock()
@@ -469,31 +476,26 @@ func (s *Server) unregisterSession(session *Session, clientIP string) {
 	}
 	s.ipSessionsMu.Unlock()
 
-	log.Printf("[session %s] unregistered", session.ID)
+	log.Printf("[WebSocketRealtimeServer] [session %s] unregistered", session.ID)
 }
 
 // isModelAllowed checks if a model is in the allowed list.
-func (s *Server) isModelAllowed(model string) bool {
+func (s *WebSocketRealtimeServer) isModelAllowed(model string) bool {
 	if len(s.config.AllowedModels) == 0 {
 		return true
 	}
-	for _, m := range s.config.AllowedModels {
-		if m == model {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s.config.AllowedModels, model)
 }
 
 // GetSession returns a session by ID.
-func (s *Server) GetSession(sessionID string) *Session {
+func (s *WebSocketRealtimeServer) GetSession(sessionID string) *realtimeapi.Session {
 	s.sessionsMu.RLock()
 	defer s.sessionsMu.RUnlock()
 	return s.sessions[sessionID]
 }
 
 // SessionCount returns the number of active sessions.
-func (s *Server) SessionCount() int {
+func (s *WebSocketRealtimeServer) SessionCount() int {
 	s.sessionsMu.RLock()
 	defer s.sessionsMu.RUnlock()
 	return len(s.sessions)

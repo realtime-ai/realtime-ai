@@ -480,6 +480,14 @@ func (r *qwenRealtimeStreamingRecognizer) handleMessage(data []byte) {
 	case "session.updated":
 		r.handleSessionUpdated(data)
 
+	case "session.created":
+		log.Printf("[QwenRealtime] Session created")
+
+	case "conversation.item.created":
+		// This event is fired when a new item is added to the conversation
+		// For STT-only use case, we can ignore it or log it at debug level
+		log.Printf("[QwenRealtime] Conversation item created")
+
 	case "input_audio_buffer.committed":
 		log.Printf("[QwenRealtime] Audio buffer committed, waiting for transcription...")
 
