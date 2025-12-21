@@ -42,7 +42,8 @@ go run examples/grpc-assis/client/main.go           # gRPC client
 go run examples/whisper-stt/main.go                 # Whisper STT with VAD
 go run examples/qwen-realtime-stt/main.go           # Qwen Realtime STT (true streaming)
 go run examples/translation-demo/main.go            # Real-time transcription + translation
-go run examples/simultaneous-interpretation/main.go # Voice-to-voice interpretation
+go run examples/simultaneous-interpretation-realtime/main.go # Voice-to-voice interpretation (Realtime API - Recommended)
+go run examples/simultaneous-interpretation/main.go # Voice-to-voice interpretation (Traditional - Legacy)
 go run examples/tracing-demo/main.go                # Distributed tracing demo
 
 # Open web client (for WebRTC examples)
@@ -516,7 +517,9 @@ translateElement := elements.NewTranslateElement(elements.TranslateConfig{
 
 ### Use Cases
 - Real-time transcription with translation (see `examples/translation-demo/`)
-- Simultaneous interpretation systems (see `examples/simultaneous-interpretation/`)
+- Simultaneous interpretation systems:
+  - **Recommended**: `examples/simultaneous-interpretation-realtime/` (Realtime API - 70% faster, 36% cheaper)
+  - Legacy: `examples/simultaneous-interpretation/` (Traditional pipeline)
 - Multilingual chat applications
 - Live subtitle translation
 
@@ -654,10 +657,20 @@ The repository includes comprehensive examples demonstrating different use cases
   - Bilingual subtitle display
   - Shows ASR + Translation pipeline
 
-- **`examples/simultaneous-interpretation/`**: Voice-to-voice interpretation
+- **`examples/simultaneous-interpretation-realtime/`** ⭐ **RECOMMENDED**: Voice-to-voice interpretation (Realtime API)
+  - **70-80% faster** (1-2s latency vs 4-7s)
+  - **36% cheaper** ($0.014/min vs $0.022/min)
+  - **57% simpler** (3 elements vs 7)
+  - Unified Gemini Live API processing
+  - Domain-aware system instructions (casual, business, technical, medical, legal)
+  - Modern UI with smooth audio quality
+  - See `COMPARISON.md` for detailed comparison
+
+- **`examples/simultaneous-interpretation/`** (Legacy): Voice-to-voice interpretation (Traditional)
   - Complete audio-to-audio pipeline
   - Whisper STT → Translate → OpenAI TTS
   - Real-time multilingual conversation
+  - Use only if you need specific STT/TTS providers
 
 ### Development Tools
 - **`examples/local-assis/`**: Local connection testing
