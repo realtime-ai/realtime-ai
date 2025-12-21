@@ -7,52 +7,75 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hraban/opus"
 	"github.com/realtime-ai/realtime-ai/pkg/audio"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 )
 
+// AudioPacerSinkConfig 配置
+type AudioPacerSinkConfig struct {
+	SampleRate int // 采样率
+	Channels   int // 通道数
+}
+
+// DefaultAudioPacerSinkConfig 返回默认配置
+func DefaultAudioPacerSinkConfig() AudioPacerSinkConfig {
+	return AudioPacerSinkConfig{
+		SampleRate: audio.DefaultSampleRate,
+		Channels:   audio.Channels,
+	}
+}
+
 // AudioPacerSinkElement 将音频数据写入音频节奏控制器，实现固定20ms间隔的音频输出
+// 只做缓冲和帧切分，不做编码
 type AudioPacerSinkElement struct {
 	*pipeline.BaseElement
 
 	pacer  *audio.AudioPacer
 	dumper *audio.Dumper
 
-	encoder *opus.Encoder
+	sampleRate int
+	channels   int
 
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
 
+// NewAudioPacerSinkElement 创建新的 AudioPacerSinkElement (使用默认配置)
 func NewAudioPacerSinkElement() *AudioPacerSinkElement {
-	pacer, err := audio.NewAudioPacer()
+	return NewAudioPacerSinkElementWithConfig(DefaultAudioPacerSinkConfig())
+}
+
+// NewAudioPacerSinkElementWithConfig 创建新的 AudioPacerSinkElement (使用自定义配置)
+func NewAudioPacerSinkElementWithConfig(cfg AudioPacerSinkConfig) *AudioPacerSinkElement {
+	if cfg.SampleRate <= 0 {
+		cfg.SampleRate = audio.DefaultSampleRate
+	}
+	if cfg.Channels <= 0 {
+		cfg.Channels = audio.Channels
+	}
+
+	pacer, err := audio.NewAudioPacerWithConfig(audio.AudioPacerConfig{
+		SampleRate: cfg.SampleRate,
+		Channels:   cfg.Channels,
+	})
 	if err != nil {
 		log.Fatal("create audio buffer error: ", err)
 	}
 
 	var dumper *audio.Dumper
 	if os.Getenv("DUMP_LOCAL_AUDIO") == "true" {
-		dumper, err = audio.NewDumper("local", 24000, 1)
+		dumper, err = audio.NewDumper("local", cfg.SampleRate, cfg.Channels)
 		if err != nil {
 			log.Printf("create audio dumper error: %v", err)
 		}
 	}
 
-	encoder, err := opus.NewEncoder(48000, 1, opus.AppVoIP)
-	if err != nil {
-		log.Fatal("create opus encoder error: ", err)
-	}
-
-	// // 设置编码参数
-	encoder.SetBitrate(50000) // 64 kbps
-	encoder.SetComplexity(10) // 最高质量
-
 	return &AudioPacerSinkElement{
 		BaseElement: pipeline.NewBaseElement("audio-pacer-sink-element", 100),
 		pacer:       pacer,
 		dumper:      dumper,
-		encoder:     encoder,
+		sampleRate:  cfg.SampleRate,
+		channels:    cfg.Channels,
 	}
 }
 
@@ -149,8 +172,8 @@ func (e *AudioPacerSinkElement) run(ctx context.Context) {
 						Type: pipeline.MsgTypeAudio,
 						AudioData: &pipeline.AudioData{
 							Data:       audioData,
-							SampleRate: 48000,
-							Channels:   1,
+							SampleRate: e.sampleRate,
+							Channels:   e.channels,
 							MediaType:  pipeline.AudioMediaTypeRaw,
 							Timestamp:  time.Now(),
 						},

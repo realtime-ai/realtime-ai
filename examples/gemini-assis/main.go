@@ -92,12 +92,12 @@ func createPipeline(_ context.Context, session *realtimeapi.Session, apiKey stri
 		print(audioPacer)
 
 		// Add elements
-		p.AddElements([]pipeline.Element{inputResample, gemini, outputResample})
+		p.AddElements([]pipeline.Element{inputResample, gemini, outputResample, audioPacer})
 
 		// Link elements
 		p.Link(inputResample, gemini)
 		p.Link(gemini, outputResample)
-		// p.Link(outputResample, audioPacer)
+		p.Link(outputResample, audioPacer)
 
 		log.Printf("[Pipeline] Created Gemini pipeline for session %s (model: %s)", session.ID, elements.DefaultGeminiModel)
 	} else {
