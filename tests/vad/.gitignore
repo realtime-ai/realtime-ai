@@ -1,0 +1,15 @@
+# Generated VAD analysis files
+*_vad.json
+vad_analysis.json
+
+# Generated visualization images
+*_visualization.png
+*.png
+
+# Python cache
+__pycache__/
+*.pyc
+
+# But keep test audio files
+!vad_test_en.wav
+!test_speech.wav
