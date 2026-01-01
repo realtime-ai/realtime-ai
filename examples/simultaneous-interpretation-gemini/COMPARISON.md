@@ -306,5 +306,5 @@ geminiConfig := elements.GeminiLiveConfig{
 
 ---
 
-**Migration Guide:** See examples/simultaneous-interpretation-realtime/
+**Migration Guide:** See examples/simultaneous-interpretation-gemini/
 **Traditional Code:** See examples/simultaneous-interpretation/

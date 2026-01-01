@@ -1,37 +1,39 @@
-# Real-time Simultaneous Interpretation (Gemini Live API)
+# Real-time Simultaneous Interpretation (Gemini Live)
 
-**Ultra-low latency audio-to-audio interpretation powered by Gemini Live API**
+**超低延迟一体化语音同传 - 基于 Gemini Live API**
 
-## 🎯 Key Improvements
+## 🎯 两种方案对比
 
-| Metric | Traditional Pipeline | Realtime API | Improvement |
-|--------|---------------------|--------------|-------------|
-| **Latency** | 4-7 seconds | 1-2 seconds | **70-80% reduction** |
-| **Cost** | $0.022/min | $0.014/min | **36% savings** |
-| **Elements** | 7 components | 3 components | **57% simpler** |
-| **Audio Quality** | Choppy (needs fix) | Smooth | **Better** |
-| **Complexity** | High | Low | **Much easier** |
+| 特性 | **本方案 (Gemini)** | [模块化方案](../simultaneous-interpretation/) |
+|------|-------------------|------------------------|
+| **延迟** | 1-2 秒 ✅ | 4-7 秒 |
+| **成本** | $0.014/分钟 ✅ | $0.022/分钟 |
+| **架构** | 3 个模块 (一体化) | 7 个独立模块 |
+| **定制性** | 低 - 仅限 Gemini | ✅ **高** - 可换任意 Provider |
+| **适合场景** | 快速原型、低延迟需求 | 企业定制、合规要求 |
 
-## 🚀 Architecture
+## 🚀 架构对比
 
-### Traditional Pipeline (examples/simultaneous-interpretation)
+### 模块化方案 (examples/simultaneous-interpretation)
 ```
-Mic → Resample → VAD → Whisper STT (3s) → Translation (2s) → TTS (2s) → Resample → Opus → Speaker
-Total: 7 elements, 4-7s latency, $0.022/min
-```
-
-### Realtime API Pipeline (this example)
-```
-Mic → Resample → [Gemini Live: STT+Translation+TTS] → Resample → Speaker
-Total: 3 elements, 1-2s latency, $0.014/min
+🎤 → Resample → VAD → Whisper (3s) → 翻译 (2s) → TTS (2s) → Resample → Opus → 🔊
+共 7 个模块, 延迟 4-7s, 成本 $0.022/min
+优势: 每个模块可独立替换
 ```
 
-**Why Gemini Live is better:**
-- ✅ Single API call replaces 3 separate APIs
-- ✅ Native audio understanding (no transcription step)
-- ✅ Built-in VAD and natural speech synthesis
-- ✅ Optimized for low latency
-- ✅ Simpler codebase and configuration
+### Gemini 方案 (本示例)
+```
+🎤 → Resample → [Gemini Live: 语音理解+翻译+语音合成] → Resample → 🔊
+共 3 个模块, 延迟 1-2s, 成本 $0.014/min
+优势: 一体化处理，延迟最低
+```
+
+**Gemini Live 优势:**
+- ✅ 单一 API 调用替代 3 个独立 API
+- ✅ 原生音频理解 (无需转文字)
+- ✅ 内置 VAD 和自然语音合成
+- ✅ 专为低延迟优化
+- ✅ 代码和配置更简单
 
 ## 📋 Quick Start
 
@@ -45,7 +47,7 @@ Total: 3 elements, 1-2s latency, $0.014/min
 ### 2. Installation
 
 ```bash
-cd examples/simultaneous-interpretation-realtime
+cd examples/simultaneous-interpretation-gemini
 
 # Copy and edit configuration
 cp .env.example .env

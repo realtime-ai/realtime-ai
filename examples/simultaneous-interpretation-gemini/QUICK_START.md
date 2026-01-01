@@ -14,7 +14,7 @@ Get your simultaneous interpretation system running in **5 minutes**.
 ### Step 1: Configure (1 minute)
 
 ```bash
-cd examples/simultaneous-interpretation-realtime
+cd examples/simultaneous-interpretation-gemini
 
 # Create .env file
 cp .env.example .env

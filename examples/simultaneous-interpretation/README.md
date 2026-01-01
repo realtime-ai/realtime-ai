@@ -1,249 +1,189 @@
-# Real-time Simultaneous Interpretation
+# Real-time Simultaneous Interpretation (Modular Pipeline)
 
-> ⚠️ **NEW: Realtime API Version Available!**
->
-> A **significantly improved version** using Gemini Live API is now available at:
-> **[`examples/simultaneous-interpretation-realtime/`](../simultaneous-interpretation-realtime/)**
->
-> **Benefits of the new version:**
-> - ✅ **70-80% faster** (1-2s latency vs 4-7s)
-> - ✅ **36% cheaper** ($0.014/min vs $0.022/min)
-> - ✅ **57% simpler** (3 elements vs 7)
-> - ✅ **Better audio quality** (smooth, no choppiness)
-> - ✅ **Easier setup** (5 minutes vs 1 hour)
->
-> **👉 We strongly recommend using the Realtime API version for all new projects.**
->
-> See [COMPARISON.md](../simultaneous-interpretation-realtime/COMPARISON.md) for detailed comparison.
+**高度可定制的模块化语音同传系统**
 
----
+## 🎯 两种方案对比
 
-# Traditional Pipeline Implementation (Legacy)
+| 特性 | **本方案 (模块化)** | [Gemini 方案](../simultaneous-interpretation-gemini/) |
+|------|-------------------|------------------------|
+| **架构** | 7 个独立模块 | 3 个模块 (Gemini 一体化) |
+| **延迟** | 4-7 秒 | 1-2 秒 |
+| **成本** | $0.022/分钟 | $0.014/分钟 |
+| **可定制性** | ✅ **高** - 可换任意 STT/TTS | ⚠️ 低 - 仅限 Gemini |
+| **Provider 选择** | ✅ OpenAI/Azure/自定义 | ⚠️ 仅 Google |
+| **细粒度控制** | ✅ 每步骤可调 | ⚠️ 黑盒处理 |
+| **适合场景** | 企业定制、合规要求 | 快速原型、低延迟需求 |
 
-> **Note:** This implementation uses the traditional STT→Translation→TTS pipeline.
-> While functional, it has higher latency and cost compared to the Realtime API version.
->
-> **Use this version only if you need:**
-> - Specific STT/TTS providers (Azure, custom providers)
-> - Fine-grained control over each pipeline stage
-> - Custom processing between stages
+## ✅ 选择本方案当...
 
-A complete real-time simultaneous interpretation system that converts speech from one language to another in real-time. Speak in your native language and hear the interpretation instantly through your speakers - just like having a professional interpreter!
+- 🏢 **需要特定 Provider** - 企业已有 Azure/AWS 合约
+- 🔧 **需要细粒度控制** - 自定义每个处理步骤
+- 📊 **需要中间结果** - 获取原文、译文、音频各阶段数据
+- 🔒 **合规要求** - 必须使用特定云服务商
+- 🎨 **自定义 TTS 声音** - 使用特定的语音合成服务
+- 🧪 **研究/实验** - 测试不同 STT/翻译/TTS 组合
 
-## 🎯 Features
-
-- 🎤 **Real-time Speech Recognition** - Using OpenAI Whisper API
-- 🌐 **Instant Translation** - Powered by GPT-4o-mini or Gemini
-- 🔊 **Natural Speech Synthesis** - Using OpenAI TTS with multiple voice options
-- 🎧 **Audio-to-Audio Interpretation** - Complete voice-to-voice interpretation pipeline
-- 💬 **Live Bilingual Subtitles** - Optional text display of original and translated speech
-- 🔇 **Voice Activity Detection** - Optimized with Silero VAD (optional)
-- 🌍 **Multi-language Support** - Support for 99+ languages
-- ⚡ **Low Latency** - WebRTC-based streaming for minimal delay
-
-## ⚠️ Known Limitations (Fixed in Realtime API Version)
-
-This traditional implementation has some limitations:
-
-1. **High Latency**: 4-7 seconds (vs 1-2s in Realtime API version)
-2. **Missing AudioPacer**: Audio output can be choppy without proper buffering
-3. **Complex Setup**: Requires configuring 3 separate APIs
-4. **Higher Cost**: $0.022/min (vs $0.014/min in Realtime API version)
-5. **Maintenance Burden**: 7 pipeline elements to manage
-
-**These are all solved in the [Realtime API version](../simultaneous-interpretation-realtime/).**
-
-## 📋 Quick Comparison
-
-| Feature | This (Traditional) | [Realtime API](../simultaneous-interpretation-realtime/) |
-|---------|-------------------|------------------------|
-| Latency | 4-7 seconds | **1-2 seconds** ✅ |
-| Cost | $0.022/min | **$0.014/min** ✅ |
-| Setup Time | ~1 hour | **5 minutes** ✅ |
-| Pipeline Elements | 7 | **3** ✅ |
-| Audio Quality | Variable | **Smooth** ✅ |
-| Maintenance | Complex | **Simple** ✅ |
-
-## 🏗️ Architecture
-
-The system uses a modular pipeline architecture with 7 processing stages:
+## 🏗️ 模块化架构
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                    SIMULTANEOUS INTERPRETATION PIPELINE                   │
-├──────────────────────────────────────────────────────────────────────────┤
-│                                                                            │
-│  Audio Input (Microphone)                                                 │
-│      ↓                                                                     │
-│  [1] Audio Resample (48kHz → 16kHz)                                      │
-│      ↓                                                                     │
-│  [2] Silero VAD (Voice Activity Detection) [Optional]                    │
-│      ↓                                                                     │
-│  [3] Whisper STT (Speech-to-Text) ⏱️ 2-3s latency                       │
-│      ↓                                                                     │
-│  [4] Translation Element (GPT/Gemini) ⏱️ 1-2s latency                   │
-│      ↓                                                                     │
-│  [5] OpenAI TTS (Text-to-Speech) ⏱️ 1-2s latency                        │
-│      ↓                                                                     │
-│  [6] Audio Resample (24kHz → 48kHz)                                      │
-│      ↓                                                                     │
-│  [7] Opus Encode (Audio Compression)                                     │
-│      ↓                                                                     │
-│  Audio Output (Speakers/Headphones)                                       │
-│                                                                            │
-└──────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                     模块化同传 Pipeline                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  🎤 麦克风                                                       │
+│      ↓                                                          │
+│  [1] AudioResample ──────────────── 可换: 任意采样率转换        │
+│      ↓                                                          │
+│  [2] SileroVAD (可选) ───────────── 可换: WebRTC VAD, 自定义    │
+│      ↓                                                          │
+│  [3] WhisperSTT ─────────────────── 可换: Azure STT, 讯飞, 自定义│
+│      ↓                                                          │
+│  [4] TranslateElement ───────────── 可换: GPT, Gemini, DeepL    │
+│      ↓                                                          │
+│  [5] UniversalTTS ───────────────── 可换: Azure TTS, 讯飞, 自定义│
+│      ↓                                                          │
+│  [6] AudioResample                                              │
+│      ↓                                                          │
+│  [7] OpusEncode                                                 │
+│      ↓                                                          │
+│  🔊 扬声器                                                       │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-**Total Latency**: ~4-7 seconds (vs 1-2s in Realtime API version)
+**优势**: 每个模块都可以独立替换，支持混合使用不同服务商
 
-## 📋 Prerequisites
+## 🚀 快速开始
 
-- Go 1.21 or later
-- OpenAI API key (required)
-- Google API key (optional, only if using Gemini translation)
-- Microphone-enabled device
-- Web browser with WebRTC support (Chrome, Firefox, Safari, Edge)
-- Speakers or headphones
-
-## 🚀 Quick Start
-
-### 1. Installation
+### 1. 安装
 
 ```bash
-# Clone the repository and navigate to the example
-cd realtime-ai/examples/simultaneous-interpretation
-
-# Install Go dependencies
+cd examples/simultaneous-interpretation
 go mod download
 ```
 
-### 2. Configuration
-
-Create a `.env` file from the example:
+### 2. 配置
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and add your API key:
+编辑 `.env`:
 
 ```env
-OPENAI_API_KEY=sk-your-api-key-here
-SOURCE_LANG=zh
-TARGET_LANG=en
+# 必需
+OPENAI_API_KEY=sk-your-key
+
+# 语言设置
+SOURCE_LANG=zh          # 源语言
+TARGET_LANG=en          # 目标语言
+
+# 翻译 Provider (openai 或 gemini)
+TRANSLATE_PROVIDER=openai
+TRANSLATE_MODEL=gpt-4o-mini
+
+# TTS 设置
+TTS_VOICE=alloy         # alloy, echo, fable, onyx, nova, shimmer
+TTS_SPEED=1.0           # 0.25-4.0
+
+# 可选: Gemini 翻译 (需要 GOOGLE_API_KEY)
+# TRANSLATE_PROVIDER=gemini
+# GOOGLE_API_KEY=your-google-key
 ```
 
-### 3. Run the Application
+### 3. 运行
 
-**Standard mode (without VAD):**
 ```bash
+# 标准模式
 go run main.go
+
+# 带 VAD 支持 (推荐)
+go build -tags vad -o interpretation && ./interpretation
 ```
 
-**With VAD support** (recommended for better performance):
-```bash
-# First, download the VAD model
-mkdir -p models
-curl -L https://github.com/snakers4/silero-vad/raw/master/files/silero_vad.onnx -o models/silero_vad.onnx
+打开 http://localhost:8080
 
-# Build and run with VAD support
-go build -tags vad -o interpretation
-./interpretation
+## 🔧 定制示例
+
+### 示例 1: 使用 Azure STT + OpenAI TTS
+
+```go
+// 替换 Whisper 为 Azure STT
+azureSTT := elements.NewAzureSTTElement(azureConfig)
+
+// 保持 OpenAI TTS
+tts := elements.NewUniversalTTSElement(openaiProvider)
 ```
 
-### 4. Open the Web Interface
+### 示例 2: 使用 DeepL 翻译
 
-Navigate to `http://localhost:8080` in your browser and click "Start Interpretation"!
+```go
+// 自定义翻译 Provider
+translateConfig := elements.TranslateConfig{
+    Provider:   "deepl",
+    APIKey:     os.Getenv("DEEPL_API_KEY"),
+    SourceLang: "ZH",
+    TargetLang: "EN",
+}
+```
 
-## 💡 Recommendation
+### 示例 3: 获取中间结果
 
-**For new projects, we strongly recommend using the [Realtime API version](../simultaneous-interpretation-realtime/) instead.**
+```go
+// 订阅原文 (STT 输出)
+bus.Subscribe(pipeline.EventFinalResult, func(e pipeline.Event) {
+    originalText := e.Payload.(string)
+    log.Printf("原文: %s", originalText)
+})
 
-It provides:
-- Significantly lower latency (70-80% improvement)
-- Lower cost (36% savings)
-- Simpler setup and maintenance
-- Better audio quality
+// 订阅译文 (翻译输出)
+bus.Subscribe(pipeline.EventTranslationResult, func(e pipeline.Event) {
+    translatedText := e.Payload.(string)
+    log.Printf("译文: %s", translatedText)
+})
+```
 
-This traditional implementation is maintained for:
-- Users who need specific STT/TTS providers
-- Projects requiring fine-grained control
-- Compatibility with existing systems
+## 📊 性能特点
 
-## 📚 Documentation
+| 指标 | 本方案 | 说明 |
+|------|--------|------|
+| **延迟** | 4-7 秒 | STT (2-3s) + 翻译 (1-2s) + TTS (1-2s) |
+| **成本** | $0.022/分钟 | Whisper + GPT + TTS 总计 |
+| **可用性** | 99.9% | 多 Provider 可做故障转移 |
+| **定制性** | ⭐⭐⭐⭐⭐ | 完全可控 |
 
-For detailed documentation on this implementation, see the sections below.
+## 🆚 何时选择 Gemini 方案
 
-For the recommended Realtime API version:
-- **Quick Start**: See [`simultaneous-interpretation-realtime/QUICK_START.md`](../simultaneous-interpretation-realtime/QUICK_START.md)
-- **Full Docs**: See [`simultaneous-interpretation-realtime/README.md`](../simultaneous-interpretation-realtime/README.md)
-- **Comparison**: See [`simultaneous-interpretation-realtime/COMPARISON.md`](../simultaneous-interpretation-realtime/COMPARISON.md)
+如果你：
+- ✅ 追求最低延迟 (1-2 秒)
+- ✅ 追求最低成本
+- ✅ 不需要特定 Provider
+- ✅ 快速原型开发
 
----
+👉 使用 [simultaneous-interpretation-gemini](../simultaneous-interpretation-gemini/)
 
-## Traditional Implementation Details
+## 📚 进阶文档
 
-[Rest of the original README content follows...]
+- [COMPARISON.md](../simultaneous-interpretation-gemini/COMPARISON.md) - 详细对比
+- [pkg/asr/README.md](../../pkg/asr/README.md) - ASR 接口文档
+- [pkg/tts/README.md](../../pkg/tts/README.md) - TTS 接口文档
 
-### Pipeline Components
+## 🔧 故障排除
 
-1. **AudioResampleElement** - Converts audio to 16kHz mono (Whisper's required format)
-2. **SileroVADElement** (optional) - Detects voice activity to optimize API calls
-3. **WhisperSTTElement** - Transcribes speech to text using OpenAI Whisper
-4. **TranslateElement** - Translates text using GPT-4o-mini or Gemini
-5. **UniversalTTSElement** - Synthesizes translated text to natural speech
-6. **AudioResampleElement** - Converts TTS output to 48kHz (WebRTC standard)
-7. **OpusEncodeElement** - Compresses audio for efficient transmission
+### 延迟过高
+- 启用 VAD 减少无效 API 调用
+- 使用更快的翻译模型 (gpt-4o-mini)
+- 检查网络延迟
 
-### Known Issues
+### 音频卡顿
+- 添加 AudioPacer 元素平滑输出
+- 检查 WebRTC 连接质量
 
-⚠️ **Audio Choppy/Stuttering**: This implementation lacks AudioPacer which can cause choppy audio output. This is fixed in the Realtime API version.
+### 翻译质量差
+- 调整翻译 prompt
+- 尝试不同模型
+- 检查语言代码是否正确
 
-⚠️ **High Latency**: The sequential pipeline (STT→Translation→TTS) results in 4-7 second latency. The Realtime API version achieves 1-2 seconds.
+## 📄 License
 
-⚠️ **Higher Costs**: Using 3 separate APIs costs ~36% more than the unified Realtime API approach.
-
----
-
-## Migration to Realtime API
-
-To migrate from this traditional implementation to the Realtime API version:
-
-1. **Navigate to the new directory**:
-   ```bash
-   cd ../simultaneous-interpretation-realtime
-   ```
-
-2. **Update configuration**:
-   ```bash
-   cp .env.example .env
-   # Edit .env - you only need GOOGLE_API_KEY now
-   ```
-
-3. **Run the new version**:
-   ```bash
-   go run main.go
-   open http://localhost:8080
-   ```
-
-**Migration time**: ~5 minutes
-**Performance improvement**: 70-80% latency reduction
-
-See [Migration Guide](../simultaneous-interpretation-realtime/COMPARISON.md#migration-path) for details.
-
----
-
-## License
-
-This example is part of the Realtime AI framework. See the main repository for license information.
-
-## Support
-
-For issues and questions:
-- **GitHub Issues**: [realtime-ai/realtime-ai/issues](https://github.com/realtime-ai/realtime-ai/issues)
-- **Realtime API Version** (recommended): See [`simultaneous-interpretation-realtime/`](../simultaneous-interpretation-realtime/)
-- **Documentation**: See main repository README and CLAUDE.md
-
----
-
-**💡 Recommendation: Switch to [Realtime API version](../simultaneous-interpretation-realtime/) for better performance!**
+See main repository for license information.

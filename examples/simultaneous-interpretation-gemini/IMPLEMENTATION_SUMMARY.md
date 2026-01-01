@@ -11,7 +11,7 @@ A **production-ready simultaneous interpretation system** using Gemini Live API 
 ## Project Structure
 
 ```
-simultaneous-interpretation-realtime/
+simultaneous-interpretation-gemini/
 ├── main.go                    # Server & pipeline implementation
 ├── static/
 │   └── index.html            # Modern web UI (Gemini-assis style)
