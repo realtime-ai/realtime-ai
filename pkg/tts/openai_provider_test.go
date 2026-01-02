@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"testing"
+
+	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
 )
 
 func TestOpenAITTSProvider_Name(t *testing.T) {
@@ -107,7 +109,7 @@ func TestOpenAITTSProvider_GetAudioFormat(t *testing.T) {
 
 	tests := []struct {
 		format        string
-		expectedMedia string
+		expectedMedia pipeline.AudioMediaType
 		expectedRate  int
 		expectedEnc   string
 	}{

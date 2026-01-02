@@ -59,7 +59,7 @@ To debug and verify VAD detection accuracy, you can visualize the audio waveform
 ```bash
 cd tests/vad
 
-# Run the analyzer with default settings (uses vad_test_en.wav)
+# Run the analyzer with default settings (uses ../audiofiles/vad_test_en.wav)
 go run -tags vad vad_analyze.go
 
 # Or specify a different audio file
@@ -69,7 +69,7 @@ go run -tags vad vad_analyze.go my_audio.wav
 go run -tags vad vad_analyze.go -audio=my_audio.wav -threshold=0.6 -output=result.json
 
 # Available flags:
-#   -audio     Path to the audio file (default: vad_test_en.wav)
+#   -audio     Path to the audio file (default: ../audiofiles/vad_test_en.wav)
 #   -model     Path to Silero VAD ONNX model (default: ../../models/silero_vad.onnx)
 #   -threshold VAD speech detection threshold 0.0-1.0 (default: 0.5)
 #   -output    Output JSON file path (default: <audio_name>_vad.json)
@@ -83,10 +83,10 @@ pip install -r requirements.txt
 # or: pip install numpy matplotlib
 
 # Run visualization (use the JSON output from step 1)
-python3 visualize_vad.py vad_test_en.wav vad_test_en_vad.json
+python3 visualize_vad.py ../audiofiles/vad_test_en.wav vad_test_en_vad.json
 
 # Or specify a custom output image filename
-python3 visualize_vad.py vad_test_en.wav vad_test_en_vad.json my_analysis.png
+python3 visualize_vad.py ../audiofiles/vad_test_en.wav vad_test_en_vad.json my_analysis.png
 ```
 
 ### What the Visualization Shows
@@ -101,8 +101,8 @@ The output image contains 4 plots:
 ### Using Your Own Audio Files
 
 ```bash
-# 1. Place your audio file in tests/vad/ (or use absolute path)
-cp /path/to/your/audio.wav tests/vad/
+# 1. Place your audio file in tests/audiofiles/ (or use absolute path)
+cp /path/to/your/audio.wav tests/audiofiles/
 
 # 2. Run the analysis with your file
 go run -tags vad vad_analyze.go audio.wav
@@ -120,7 +120,7 @@ The `vad_analysis.json` file contains:
 
 ```json
 {
-  "audio_file": "vad_test_en.wav",
+  "audio_file": "../audiofiles/vad_test_en.wav",
   "sample_rate": 16000,
   "window_size": 512,
   "threshold": 0.5,

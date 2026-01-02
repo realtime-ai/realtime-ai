@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	audioFile       = "vad_test_en.wav"
+	audioFile       = "../audiofiles/vad_test_en.wav"
 	modelPath       = "../../models/silero_vad.onnx"
 	outputDir       = "./vad_segments"
 	audioSampleRate = 16000

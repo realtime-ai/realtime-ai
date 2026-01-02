@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	defaultAudioFile = "vad_test_en.wav"
+	defaultAudioFile = "../audiofiles/vad_test_en.wav"
 	defaultModelPath = "../../models/silero_vad.onnx"
 	audioSampleRate  = 16000
 	windowSize       = 512 // Silero VAD window size for 16kHz
