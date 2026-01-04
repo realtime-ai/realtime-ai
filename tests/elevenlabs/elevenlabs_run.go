@@ -558,5 +558,5 @@ func loadRootEnv(root string) error {
 	if _, err := os.Stat(envPath); err != nil {
 		return fmt.Errorf(".env not found at %s", envPath)
 	}
-	return godotenv.Load(envPath)
+	return godotenv.Overload(envPath)
 }

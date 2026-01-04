@@ -1,5 +1,3 @@
-//go:build vad
-
 package main
 
 import (
@@ -93,7 +91,7 @@ func main() {
 
 	go func() {
 		for event := range eventsChan {
-			payload := event.Payload.(elements.VADEventPayload)
+			payload := event.Payload.(pipeline.VADPayload)
 			mu.Lock()
 			switch event.Type {
 			case pipeline.EventVADSpeechStart:

@@ -1,16 +1,16 @@
 # Real-time Simultaneous Interpretation (Modular Pipeline)
 
-**高度可定制的模块化语音同传系统**
+**高度可定制的模块化语音同传系统 - 使用 ElevenLabs Scribe V2 实时 ASR**
 
 ## 🎯 两种方案对比
 
 | 特性 | **本方案 (模块化)** | [Gemini 方案](../simultaneous-interpretation-gemini/) |
 |------|-------------------|------------------------|
 | **架构** | 7 个独立模块 | 3 个模块 (Gemini 一体化) |
-| **延迟** | 4-7 秒 | 1-2 秒 |
-| **成本** | $0.022/分钟 | $0.014/分钟 |
+| **STT** | ElevenLabs Scribe V2 (~150ms) | Gemini 内置 |
+| **延迟** | 2-4 秒 | 1-2 秒 |
 | **可定制性** | ✅ **高** - 可换任意 STT/TTS | ⚠️ 低 - 仅限 Gemini |
-| **Provider 选择** | ✅ OpenAI/Azure/自定义 | ⚠️ 仅 Google |
+| **Provider 选择** | ✅ ElevenLabs/OpenAI/Azure/自定义 | ⚠️ 仅 Google |
 | **细粒度控制** | ✅ 每步骤可调 | ⚠️ 黑盒处理 |
 | **适合场景** | 企业定制、合规要求 | 快速原型、低延迟需求 |
 
@@ -36,7 +36,7 @@
 │      ↓                                                          │
 │  [2] SileroVAD (可选) ───────────── 可换: WebRTC VAD, 自定义    │
 │      ↓                                                          │
-│  [3] WhisperSTT ─────────────────── 可换: Azure STT, 讯飞, 自定义│
+│  [3] ElevenLabsRealtimeSTT ──────── 可换: Whisper, Azure, 讯飞  │
 │      ↓                                                          │
 │  [4] TranslateElement ───────────── 可换: GPT, Gemini, DeepL    │
 │      ↓                                                          │
@@ -71,7 +71,10 @@ cp .env.example .env
 编辑 `.env`:
 
 ```env
-# 必需
+# 必需 - ElevenLabs API (用于实时 ASR)
+ELEVENLABS_API_KEY=your-elevenlabs-key
+
+# 必需 - OpenAI API (用于翻译和 TTS)
 OPENAI_API_KEY=sk-your-key
 
 # 语言设置
@@ -105,14 +108,13 @@ go build -tags vad -o interpretation && ./interpretation
 
 ## 🔧 定制示例
 
-### 示例 1: 使用 Azure STT + OpenAI TTS
+### 示例 1: 使用 Whisper STT 替换 ElevenLabs
 
 ```go
-// 替换 Whisper 为 Azure STT
-azureSTT := elements.NewAzureSTTElement(azureConfig)
+// 替换 ElevenLabs 为 Whisper
+whisperSTT := elements.NewWhisperSTTElement(whisperConfig)
 
-// 保持 OpenAI TTS
-tts := elements.NewUniversalTTSElement(openaiProvider)
+// 保持其他模块不变
 ```
 
 ### 示例 2: 使用 DeepL 翻译
@@ -136,10 +138,10 @@ bus.Subscribe(pipeline.EventFinalResult, func(e pipeline.Event) {
     log.Printf("原文: %s", originalText)
 })
 
-// 订阅译文 (翻译输出)
-bus.Subscribe(pipeline.EventTranslationResult, func(e pipeline.Event) {
-    translatedText := e.Payload.(string)
-    log.Printf("译文: %s", translatedText)
+// 订阅部分结果 (实时转录)
+bus.Subscribe(pipeline.EventPartialResult, func(e pipeline.Event) {
+    partialText := e.Payload.(string)
+    log.Printf("实时: %s", partialText)
 })
 ```
 
@@ -147,8 +149,8 @@ bus.Subscribe(pipeline.EventTranslationResult, func(e pipeline.Event) {
 
 | 指标 | 本方案 | 说明 |
 |------|--------|------|
-| **延迟** | 4-7 秒 | STT (2-3s) + 翻译 (1-2s) + TTS (1-2s) |
-| **成本** | $0.022/分钟 | Whisper + GPT + TTS 总计 |
+| **STT 延迟** | ~150ms | ElevenLabs Scribe V2 实时 ASR |
+| **总延迟** | 2-4 秒 | STT (~150ms) + 翻译 (1-2s) + TTS (1-2s) |
 | **可用性** | 99.9% | 多 Provider 可做故障转移 |
 | **定制性** | ⭐⭐⭐⭐⭐ | 完全可控 |
 

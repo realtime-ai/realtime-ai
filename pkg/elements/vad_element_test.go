@@ -1,5 +1,3 @@
-//go:build vad
-
 package elements
 
 import (
@@ -347,10 +345,10 @@ func TestGetIsSpeaking(t *testing.T) {
 	assert.False(t, elem.GetIsSpeaking())
 
 	// Manually set speaking state for testing
-	elem.isSpeaking = true
+	elem.isSpeaking.Store(true)
 	assert.True(t, elem.GetIsSpeaking())
 
-	elem.isSpeaking = false
+	elem.isSpeaking.Store(false)
 	assert.False(t, elem.GetIsSpeaking())
 }
 
@@ -487,13 +485,13 @@ func TestVADElementSpeechDetection(t *testing.T) {
 			switch event.Type {
 			case pipeline.EventVADSpeechStart:
 				speechStartReceived = true
-				payload := event.Payload.(VADEventPayload)
-				assert.Equal(t, "test-session", payload.SessionID)
+				payload := event.Payload.(pipeline.VADPayload)
+				assert.Equal(t, "test-session", payload.ItemID)
 				t.Logf("Speech started at %d ms with confidence %.3f", payload.AudioMs, payload.Confidence)
 			case pipeline.EventVADSpeechEnd:
 				speechEndReceived = true
-				payload := event.Payload.(VADEventPayload)
-				assert.Equal(t, "test-session", payload.SessionID)
+				payload := event.Payload.(pipeline.VADPayload)
+				assert.Equal(t, "test-session", payload.ItemID)
 				t.Logf("Speech ended at %d ms with confidence %.3f", payload.AudioMs, payload.Confidence)
 			}
 		case <-timeout:

@@ -351,15 +351,33 @@ func (e *WhisperSTTElement) handleVADEvents(ctx context.Context) {
 
 			switch event.Type {
 			case pipeline.EventVADSpeechStart:
-				log.Printf("[WhisperSTT] VAD speech started")
+				// Extract pre-roll audio from VAD payload
+				if payload, ok := event.Payload.(pipeline.VADPayload); ok {
+					// Send pre-roll audio first (before setting isSpeaking)
+					if len(payload.PreRollAudio) > 0 {
+						log.Printf("[WhisperSTT] VAD speech started with %d bytes pre-roll audio",
+							len(payload.PreRollAudio))
+						e.sendAudioToRecognizer(ctx, payload.PreRollAudio)
+						// Also add to buffer for recognizeBufferedAudio
+						e.audioBufferLock.Lock()
+						e.audioBuffer = append(e.audioBuffer[:0], payload.PreRollAudio...)
+						e.audioBufferLock.Unlock()
+					} else {
+						log.Printf("[WhisperSTT] VAD speech started (no pre-roll)")
+						e.audioBufferLock.Lock()
+						e.audioBuffer = e.audioBuffer[:0]
+						e.audioBufferLock.Unlock()
+					}
+				} else {
+					log.Printf("[WhisperSTT] VAD speech started (legacy payload)")
+					e.audioBufferLock.Lock()
+					e.audioBuffer = e.audioBuffer[:0]
+					e.audioBufferLock.Unlock()
+				}
+
 				e.speakingMutex.Lock()
 				e.isSpeaking = true
 				e.speakingMutex.Unlock()
-
-				// Clear buffer and start fresh
-				e.audioBufferLock.Lock()
-				e.audioBuffer = e.audioBuffer[:0]
-				e.audioBufferLock.Unlock()
 
 			case pipeline.EventVADSpeechEnd:
 				log.Printf("[WhisperSTT] VAD speech ended")
