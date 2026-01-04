@@ -4,50 +4,41 @@ This directory contains tests for the Silero VAD element, which detects speech s
 
 ## Prerequisites
 
+### ONNX Runtime v1.20.1
+
 ```bash
-# Install ONNX Runtime (macOS)
+# Ubuntu/Debian
+wget https://github.com/microsoft/onnxruntime/releases/download/v1.20.1/onnxruntime-linux-x64-1.20.1.tgz
+tar -xzf onnxruntime-linux-x64-1.20.1.tgz
+export ONNXRUNTIME_LIB=$(pwd)/onnxruntime-linux-x64-1.20.1/lib/libonnxruntime.so
+export LD_LIBRARY_PATH=$(pwd)/onnxruntime-linux-x64-1.20.1/lib:$LD_LIBRARY_PATH
+
+# macOS
 brew install onnxruntime
+# Library is auto-detected at /opt/homebrew/lib/libonnxruntime.dylib
 ```
 
 ## Quick Start
 
-### Option 1: Using direnv (Recommended)
+### Run Simple Test
 
 ```bash
-# Install direnv if not already installed
-brew install direnv
-
-# Add to your shell (add to ~/.zshrc or ~/.bashrc)
-eval "$(direnv hook zsh)"  # or bash
-
-# Allow the .envrc file (one-time setup)
-cd /path/to/realtime-ai
-direnv allow
-
-# Now environment is auto-configured when entering the directory!
-cd tests/vad && go run -tags vad .
+# From project root
+go run -tags vad ./tests/vad/simple/main.go
 ```
 
-### Option 2: Using the setup script
+### Run VAD Analysis
 
 ```bash
-# Source the setup script
-source scripts/setup-onnx-env.sh
-
-# Run VAD tests
-cd tests/vad && go run -tags vad .
+# From project root
+go run -tags vad ./tests/vad/analyze/main.go -audio=tests/audiofiles/vad_test_en.wav -model=models/silero_vad.onnx
 ```
 
-### Option 3: Manual setup
+### Run Unit Tests
 
 ```bash
-# Set up ONNX Runtime environment manually
-ORT_PREFIX="$(brew --prefix onnxruntime)"
-export CGO_CFLAGS="-I$ORT_PREFIX/include/onnxruntime"
-export CGO_LDFLAGS="-L$ORT_PREFIX/lib -lonnxruntime"
-
-# Run the VAD test
-cd tests/vad && go run -tags vad .
+# Run pkg/vad unit tests
+go test -tags vad -v ./pkg/vad/
 ```
 
 ## VAD Visualization & Analysis

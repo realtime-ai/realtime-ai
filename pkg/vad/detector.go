@@ -1,13 +1,33 @@
-package vad
+// Package vad provides Voice Activity Detection using Silero VAD model.
+//
+// This package uses onnxruntime_go for ONNX model inference, replacing the
+// previous CGO-based implementation.
+//
+// Usage:
+//
+//	// Initialize the ONNX runtime (call once at startup)
+//	if err := vad.InitRuntime(""); err != nil {
+//	    log.Fatal(err)
+//	}
+//	defer vad.DestroyRuntime()
+//
+//	// Create a detector
+//	detector, err := vad.NewDetector(vad.DetectorConfig{
+//	    ModelPath:  "path/to/silero_vad.onnx",
+//	    SampleRate: 16000,
+//	})
+//
+//go:build vad
 
-// #cgo pkg-config: libonnxruntime
-// #cgo CFLAGS: -Wall -Werror -std=c99
-// #include "ort_bridge.h"
-import "C"
+package vad
 
 import (
 	"fmt"
-	"unsafe"
+	"os"
+	"path/filepath"
+	"sync"
+
+	ort "github.com/yalue/onnxruntime_go"
 )
 
 const (
@@ -15,24 +35,8 @@ const (
 	contextLen = 64
 )
 
+// LogLevel represents the ONNX Runtime logging level.
 type LogLevel int
-
-func (l LogLevel) OrtLoggingLevel() C.OrtLoggingLevel {
-	switch l {
-	case LevelVerbose:
-		return C.ORT_LOGGING_LEVEL_VERBOSE
-	case LogLevelInfo:
-		return C.ORT_LOGGING_LEVEL_INFO
-	case LogLevelWarn:
-		return C.ORT_LOGGING_LEVEL_WARNING
-	case LogLevelError:
-		return C.ORT_LOGGING_LEVEL_ERROR
-	case LogLevelFatal:
-		return C.ORT_LOGGING_LEVEL_FATAL
-	default:
-		return C.ORT_LOGGING_LEVEL_WARNING
-	}
-}
 
 const (
 	LevelVerbose LogLevel = iota + 1
@@ -42,6 +46,101 @@ const (
 	LogLevelFatal
 )
 
+// runtimeInitialized tracks whether the ONNX runtime has been initialized.
+var (
+	runtimeInitialized bool
+	runtimeMu          sync.Mutex
+)
+
+// InitRuntime initializes the ONNX runtime environment.
+// libraryPath can be empty to use auto-detection, or specify the path to libonnxruntime.so.
+// This should be called once at application startup before creating any detectors.
+func InitRuntime(libraryPath string) error {
+	runtimeMu.Lock()
+	defer runtimeMu.Unlock()
+
+	if runtimeInitialized {
+		return nil
+	}
+
+	if libraryPath != "" {
+		ort.SetSharedLibraryPath(libraryPath)
+	} else {
+		// Try to find the library in common locations
+		libPath := findONNXRuntimeLibrary()
+		if libPath != "" {
+			ort.SetSharedLibraryPath(libPath)
+		}
+	}
+
+	if err := ort.InitializeEnvironment(); err != nil {
+		return fmt.Errorf("failed to initialize ONNX runtime: %w", err)
+	}
+
+	runtimeInitialized = true
+	return nil
+}
+
+// DestroyRuntime destroys the ONNX runtime environment.
+// This should be called once at application shutdown.
+func DestroyRuntime() error {
+	runtimeMu.Lock()
+	defer runtimeMu.Unlock()
+
+	if !runtimeInitialized {
+		return nil
+	}
+
+	if err := ort.DestroyEnvironment(); err != nil {
+		return fmt.Errorf("failed to destroy ONNX runtime: %w", err)
+	}
+
+	runtimeInitialized = false
+	return nil
+}
+
+// findONNXRuntimeLibrary tries to find the ONNX Runtime shared library.
+func findONNXRuntimeLibrary() string {
+	// Common paths to check
+	paths := []string{
+		// Environment variable
+		os.Getenv("ONNXRUNTIME_LIB"),
+		// Linux system paths
+		"/usr/lib/libonnxruntime.so",
+		"/usr/local/lib/libonnxruntime.so",
+		"/opt/onnxruntime/lib/libonnxruntime.so",
+		// macOS Homebrew paths
+		"/opt/homebrew/lib/libonnxruntime.dylib",
+		"/usr/local/lib/libonnxruntime.dylib",
+	}
+
+	// Also check LD_LIBRARY_PATH
+	if ldPath := os.Getenv("LD_LIBRARY_PATH"); ldPath != "" {
+		for _, dir := range filepath.SplitList(ldPath) {
+			paths = append(paths, filepath.Join(dir, "libonnxruntime.so"))
+		}
+	}
+
+	// Check DYLD_LIBRARY_PATH for macOS
+	if dyldPath := os.Getenv("DYLD_LIBRARY_PATH"); dyldPath != "" {
+		for _, dir := range filepath.SplitList(dyldPath) {
+			paths = append(paths, filepath.Join(dir, "libonnxruntime.dylib"))
+		}
+	}
+
+	for _, p := range paths {
+		if p == "" {
+			continue
+		}
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+
+	return ""
+}
+
+// DetectorConfig holds configuration for creating a VAD detector.
 type DetectorConfig struct {
 	// The path to the ONNX Silero VAD model file to load.
 	ModelPath string
@@ -51,6 +150,7 @@ type DetectorConfig struct {
 	LogLevel LogLevel
 }
 
+// IsValid validates the detector configuration.
 func (c DetectorConfig) IsValid() error {
 	if c.ModelPath == "" {
 		return fmt.Errorf("invalid ModelPath: should not be empty")
@@ -63,91 +163,168 @@ func (c DetectorConfig) IsValid() error {
 	return nil
 }
 
+// Detector provides voice activity detection using the Silero VAD model.
 type Detector struct {
-	api         *C.OrtApi
-	env         *C.OrtEnv
-	sessionOpts *C.OrtSessionOptions
-	session     *C.OrtSession
-	memoryInfo  *C.OrtMemoryInfo
-	cStrings    map[string]*C.char
+	session *ort.DynamicAdvancedSession
 
 	cfg DetectorConfig
 
+	// RNN state (h, c) for the LSTM layers
 	state [stateLen]float32
-	ctx   [contextLen]float32
+	// Context buffer for continuous processing
+	ctx [contextLen]float32
 	// currSample tracks total samples processed, used to determine if context should be applied.
 	// On the first inference (currSample == 0), no context is prepended.
 	currSample int
+
+	// Pre-allocated tensors for inference
+	inputNames  []string
+	outputNames []string
 }
 
+// NewDetector creates a new VAD detector with the given configuration.
+// InitRuntime must be called before creating a detector.
 func NewDetector(cfg DetectorConfig) (*Detector, error) {
 	if err := cfg.IsValid(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
-	sd := Detector{
-		cfg:      cfg,
-		cStrings: map[string]*C.char{},
+	// Ensure runtime is initialized
+	runtimeMu.Lock()
+	if !runtimeInitialized {
+		runtimeMu.Unlock()
+		// Auto-initialize runtime
+		if err := InitRuntime(""); err != nil {
+			return nil, fmt.Errorf("ONNX runtime not initialized: %w", err)
+		}
+	} else {
+		runtimeMu.Unlock()
 	}
 
-	sd.api = C.OrtGetApi()
-	if sd.api == nil {
-		return nil, fmt.Errorf("failed to get API")
+	sd := &Detector{
+		cfg:         cfg,
+		inputNames:  []string{"input", "state", "sr"},
+		outputNames: []string{"output", "stateN"},
 	}
 
-	sd.cStrings["loggerName"] = C.CString("vad")
-	status := C.OrtApiCreateEnv(sd.api, cfg.LogLevel.OrtLoggingLevel(), sd.cStrings["loggerName"], &sd.env)
-	defer C.OrtApiReleaseStatus(sd.api, status)
-	if status != nil {
-		return nil, fmt.Errorf("failed to create env: %s", C.GoString(C.OrtApiGetErrorMessage(sd.api, status)))
+	// Create session options
+	options, err := ort.NewSessionOptions()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create session options: %w", err)
+	}
+	defer options.Destroy()
+
+	// Set graph optimization level
+	if err := options.SetGraphOptimizationLevel(ort.GraphOptimizationLevelEnableAll); err != nil {
+		return nil, fmt.Errorf("failed to set graph optimization level: %w", err)
 	}
 
-	status = C.OrtApiCreateSessionOptions(sd.api, &sd.sessionOpts)
-	defer C.OrtApiReleaseStatus(sd.api, status)
-	if status != nil {
-		return nil, fmt.Errorf("failed to create session options: %s", C.GoString(C.OrtApiGetErrorMessage(sd.api, status)))
+	// Set number of threads
+	if err := options.SetIntraOpNumThreads(1); err != nil {
+		return nil, fmt.Errorf("failed to set intra-op threads: %w", err)
+	}
+	if err := options.SetInterOpNumThreads(1); err != nil {
+		return nil, fmt.Errorf("failed to set inter-op threads: %w", err)
 	}
 
-	status = C.OrtApiSetIntraOpNumThreads(sd.api, sd.sessionOpts, 1)
-	defer C.OrtApiReleaseStatus(sd.api, status)
-	if status != nil {
-		return nil, fmt.Errorf("failed to set intra threads: %s", C.GoString(C.OrtApiGetErrorMessage(sd.api, status)))
+	// Create dynamic session (allows variable input sizes)
+	session, err := ort.NewDynamicAdvancedSession(
+		cfg.ModelPath,
+		sd.inputNames,
+		sd.outputNames,
+		options,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
 
-	status = C.OrtApiSetInterOpNumThreads(sd.api, sd.sessionOpts, 1)
-	defer C.OrtApiReleaseStatus(sd.api, status)
-	if status != nil {
-		return nil, fmt.Errorf("failed to set inter threads: %s", C.GoString(C.OrtApiGetErrorMessage(sd.api, status)))
-	}
-
-	status = C.OrtApiSetSessionGraphOptimizationLevel(sd.api, sd.sessionOpts, C.ORT_ENABLE_ALL)
-	defer C.OrtApiReleaseStatus(sd.api, status)
-	if status != nil {
-		return nil, fmt.Errorf("failed to set session graph optimization level: %s", C.GoString(C.OrtApiGetErrorMessage(sd.api, status)))
-	}
-
-	sd.cStrings["modelPath"] = C.CString(sd.cfg.ModelPath)
-	status = C.OrtApiCreateSession(sd.api, sd.env, sd.cStrings["modelPath"], sd.sessionOpts, &sd.session)
-	defer C.OrtApiReleaseStatus(sd.api, status)
-	if status != nil {
-		return nil, fmt.Errorf("failed to create session: %s", C.GoString(C.OrtApiGetErrorMessage(sd.api, status)))
-	}
-
-	status = C.OrtApiCreateCpuMemoryInfo(sd.api, C.OrtArenaAllocator, C.OrtMemTypeDefault, &sd.memoryInfo)
-	defer C.OrtApiReleaseStatus(sd.api, status)
-	if status != nil {
-		return nil, fmt.Errorf("failed to create memory info: %s", C.GoString(C.OrtApiGetErrorMessage(sd.api, status)))
-	}
-
-	sd.cStrings["input"] = C.CString("input")
-	sd.cStrings["sr"] = C.CString("sr")
-	sd.cStrings["state"] = C.CString("state")
-	sd.cStrings["stateN"] = C.CString("stateN")
-	sd.cStrings["output"] = C.CString("output")
-
-	return &sd, nil
+	sd.session = session
+	return sd, nil
 }
 
+// Infer runs inference on audio samples and returns the speech probability.
+// samples should be normalized float32 values in the range [-1, 1].
+// Returns a probability value in [0, 1] where higher values indicate speech.
+func (sd *Detector) Infer(samples []float32) (float32, error) {
+	if sd == nil {
+		return 0, fmt.Errorf("invalid nil detector")
+	}
+
+	// Handle context: prepend previous samples for continuity (except on first call)
+	pcm := samples
+	if sd.currSample > 0 {
+		// Append context from previous iteration
+		pcm = append(sd.ctx[:], samples...)
+	}
+	// Save the last contextLen samples as context for the next iteration
+	if len(samples) >= contextLen {
+		copy(sd.ctx[:], samples[len(samples)-contextLen:])
+	}
+	sd.currSample += len(samples)
+
+	// Create input tensor for audio
+	inputShape := ort.NewShape(1, int64(len(pcm)))
+	inputTensor, err := ort.NewTensor(inputShape, pcm)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create input tensor: %w", err)
+	}
+	defer inputTensor.Destroy()
+
+	// Create state tensor
+	stateShape := ort.NewShape(2, 1, 128)
+	stateTensor, err := ort.NewTensor(stateShape, sd.state[:])
+	if err != nil {
+		return 0, fmt.Errorf("failed to create state tensor: %w", err)
+	}
+	defer stateTensor.Destroy()
+
+	// Create sample rate tensor
+	srShape := ort.NewShape(1)
+	srData := []int64{int64(sd.cfg.SampleRate)}
+	srTensor, err := ort.NewTensor(srShape, srData)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create sr tensor: %w", err)
+	}
+	defer srTensor.Destroy()
+
+	// Create output tensors
+	outputShape := ort.NewShape(1, 1)
+	outputTensor, err := ort.NewEmptyTensor[float32](outputShape)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create output tensor: %w", err)
+	}
+	defer outputTensor.Destroy()
+
+	stateNShape := ort.NewShape(2, 1, 128)
+	stateNTensor, err := ort.NewEmptyTensor[float32](stateNShape)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create stateN tensor: %w", err)
+	}
+	defer stateNTensor.Destroy()
+
+	// Run inference
+	inputs := []ort.Value{inputTensor, stateTensor, srTensor}
+	outputs := []ort.Value{outputTensor, stateNTensor}
+
+	if err := sd.session.Run(inputs, outputs); err != nil {
+		return 0, fmt.Errorf("failed to run inference: %w", err)
+	}
+
+	// Update state from output
+	stateNData := stateNTensor.GetData()
+	copy(sd.state[:], stateNData)
+
+	// Return speech probability
+	outputData := outputTensor.GetData()
+	if len(outputData) == 0 {
+		return 0, fmt.Errorf("empty output from inference")
+	}
+
+	return outputData[0], nil
+}
+
+// Reset resets the detector's internal state.
+// This should be called when starting a new audio stream.
 func (sd *Detector) Reset() error {
 	if sd == nil {
 		return fmt.Errorf("invalid nil detector")
@@ -164,18 +341,22 @@ func (sd *Detector) Reset() error {
 	return nil
 }
 
+// Destroy releases all resources held by the detector.
+// The detector should not be used after calling Destroy.
 func (sd *Detector) Destroy() error {
 	if sd == nil {
 		return fmt.Errorf("invalid nil detector")
 	}
 
-	C.OrtApiReleaseMemoryInfo(sd.api, sd.memoryInfo)
-	C.OrtApiReleaseSession(sd.api, sd.session)
-	C.OrtApiReleaseSessionOptions(sd.api, sd.sessionOpts)
-	C.OrtApiReleaseEnv(sd.api, sd.env)
-	for _, ptr := range sd.cStrings {
-		C.free(unsafe.Pointer(ptr))
+	if sd.session != nil {
+		if err := sd.session.Destroy(); err != nil {
+			return fmt.Errorf("failed to destroy session: %w", err)
+		}
+		sd.session = nil
 	}
 
 	return nil
 }
+
+// Ensure Detector implements DetectorInterface at compile time.
+var _ DetectorInterface = (*Detector)(nil)
