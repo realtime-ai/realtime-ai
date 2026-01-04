@@ -15,7 +15,7 @@ Voice Activity Detection (VAD) element using Silero VAD for real-time speech det
 
 ## Build Requirements
 
-The VAD element is **optional** and requires additional dependencies:
+VAD is included by default and requires additional dependencies:
 
 ### System Dependencies
 
@@ -38,30 +38,17 @@ The VAD element is **optional** and requires additional dependencies:
    wget https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx -O models/silero_vad.onnx
    ```
 
-### Building with VAD Support
-
-To build with VAD support, use the `vad` build tag:
+### Building
 
 ```bash
-# Build with VAD support
-go build -tags vad ./...
-
-# Run tests with VAD support
-go test -tags vad ./pkg/elements/...
-
-# Build examples with VAD support
-go build -tags vad ./examples/...
-```
-
-### Building without VAD Support (Default)
-
-By default, the project builds with a stub VAD implementation that returns errors when used:
-
-```bash
-# Regular build (VAD disabled)
+# Build
 go build ./...
 
-# The stub will be used - VAD functions will return errors
+# Run tests
+go test ./pkg/elements/...
+
+# Build examples
+go build ./examples/...
 ```
 
 ## Usage
@@ -109,9 +96,9 @@ func main() {
 
     go func() {
         for event := range eventChan {
-            payload := event.Payload.(elements.VADEventPayload)
-            log.Printf("[VAD] %s - Confidence: %.2f",
-                event.Type, payload.Confidence)
+            payload := event.Payload.(pipeline.VADPayload)
+            log.Printf("[VAD] %s - Confidence: %.2f, AudioMs: %d",
+                event.Type, payload.Confidence, payload.AudioMs)
         }
     }()
 
@@ -150,6 +137,7 @@ vadElement, err := elements.NewSileroVADElement(elements.SileroVADConfig{
 | `Threshold` | float32 | 0.5 | Speech detection threshold (0.0-1.0) |
 | `MinSilenceDurMs` | int | 100 | Minimum silence duration in ms |
 | `SpeechPadMs` | int | 30 | Speech padding in ms |
+| `PreRollMs` | int | 300 | Pre-roll buffer duration in ms |
 | `Mode` | VADMode | Passthrough | Operating mode |
 
 ### Runtime Configuration
@@ -170,14 +158,17 @@ The VAD element emits two event types via the pipeline Bus:
 
 ### EventVADSpeechStart
 
-Emitted when speech begins.
+Emitted when speech begins. Includes pre-roll audio captured before speech detection.
 
-**Payload**: `VADEventPayload`
+**Payload**: `pipeline.VADPayload`
 ```go
-type VADEventPayload struct {
-    SessionID  string
-    Confidence float32
-    Timestamp  time.Time
+type VADPayload struct {
+    AudioMs      int     // Audio position in milliseconds
+    ItemID       string  // Session/item ID
+    Confidence   float32 // Speech probability at detection time
+    PreRollAudio []byte  // Pre-roll audio data before speech start
+    SampleRate   int     // Sample rate of PreRollAudio (16000)
+    Channels     int     // Number of channels in PreRollAudio (1)
 }
 ```
 
@@ -185,7 +176,7 @@ type VADEventPayload struct {
 
 Emitted when speech ends (after minimum silence duration).
 
-**Payload**: `VADEventPayload`
+**Payload**: `pipeline.VADPayload` (without PreRollAudio)
 
 ## Performance
 
@@ -195,13 +186,6 @@ Emitted when speech ends (after minimum silence duration).
 - **Accuracy**: Excellent in various noise conditions
 
 ## Troubleshooting
-
-### "VAD support is not enabled" error
-
-Build with the `vad` tag:
-```bash
-go build -tags vad
-```
 
 ### "onnxruntime_c_api.h: No such file or directory"
 
@@ -228,11 +212,8 @@ wget https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/siler
 Tests require the VAD model and ONNX Runtime:
 
 ```bash
-# Run tests with VAD support
-go test -tags vad -v ./pkg/elements/ -run TestVAD
-
-# Most integration tests are skipped by default
-# Remove t.Skip() calls to run them
+# Run VAD tests
+go test -v ./pkg/elements/ -run TestVAD
 ```
 
 ## References

@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Real-time Simultaneous Interpretation</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 32px 20px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%);
+            color: #1a1a1a;
+            min-height: 100vh;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 32px;
+            border-radius: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+            backdrop-filter: blur(10px);
+        }
+
+        h2 {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 32px;
+            text-align: center;
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 28px;
+            padding: 16px 20px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            border-radius: 16px;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        .status-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        #status {
+            padding: 8px 18px;
+            border-radius: 24px;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        #status.disconnected {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+            color: white;
+        }
+
+        #status.connecting {
+            background: linear-gradient(135deg, #ffd93d 0%, #ffb03b 100%);
+            color: #333;
+        }
+
+        #status.connected {
+            background: linear-gradient(135deg, #51cf66 0%, #37b24d 100%);
+            color: white;
+        }
+
+        #sessionId {
+            font-size: 12px;
+            color: #868e96;
+            font-weight: 500;
+        }
+
+        button {
+            padding: 12px 28px;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: linear-gradient(135deg, #adb5bd 0%, #868e96 100%);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        button.disconnect {
+            background: linear-gradient(135deg, #868e96 0%, #495057 100%);
+            box-shadow: 0 4px 12px rgba(134, 142, 150, 0.3);
+        }
+
+        button.disconnect:hover {
+            box-shadow: 0 6px 20px rgba(134, 142, 150, 0.4);
+        }
+
+        /* Subtitle Area */
+        .subtitle-container {
+            margin-bottom: 28px;
+            padding: 24px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            border-radius: 20px;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            min-height: 140px;
+            position: relative;
+        }
+
+        .subtitle-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: #868e96;
+            margin-bottom: 14px;
+            font-weight: 600;
+        }
+
+        .subtitle-text {
+            font-size: 18px;
+            line-height: 1.7;
+            min-height: 70px;
+            font-weight: 500;
+        }
+
+        .subtitle-text.user {
+            color: #4263eb;
+        }
+
+        .subtitle-text.assistant {
+            color: #20c997;
+        }
+
+        .subtitle-text.empty {
+            color: #adb5bd;
+            font-style: italic;
+            font-weight: 400;
+        }
+
+        .speaking-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            margin-left: 8px;
+            animation: pulse 1.2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(1.3); }
+        }
+
+        /* Conversation History */
+        .conversation-container {
+            margin-bottom: 28px;
+        }
+
+        .conversation-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: #868e96;
+            margin-bottom: 14px;
+            font-weight: 600;
+        }
+
+        #conversation {
+            height: 320px;
+            overflow-y: auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            border-radius: 20px;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        #conversation::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #conversation::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #conversation::-webkit-scrollbar-thumb {
+            background: #dee2e6;
+            border-radius: 10px;
+        }
+
+        #conversation::-webkit-scrollbar-thumb:hover {
+            background: #adb5bd;
+        }
+
+        .message {
+            margin-bottom: 18px;
+            padding: 14px 18px;
+            border-radius: 16px;
+            max-width: 80%;
+            word-wrap: break-word;
+            animation: messageSlide 0.3s ease-out;
+        }
+
+        @keyframes messageSlide {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            background: linear-gradient(135deg, #e7f5ff 0%, #d0ebff 100%);
+            margin-left: auto;
+            border-bottom-right-radius: 4px;
+            border: 1px solid rgba(66, 99, 235, 0.1);
+        }
+
+        .message.assistant {
+            background: linear-gradient(135deg, #d3f9d8 0%, #b2f2bb 100%);
+            margin-right: auto;
+            border-bottom-left-radius: 4px;
+            border: 1px solid rgba(32, 201, 151, 0.1);
+        }
+
+        .message .role {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #868e96;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .message .content {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #212529;
+        }
+
+        .message .timestamp {
+            font-size: 10px;
+            color: #adb5bd;
+            margin-top: 8px;
+            text-align: right;
+        }
+
+        /* Text Input */
+        .input-group {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 28px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 16px 20px;
+            border: 2px solid #e9ecef;
+            border-radius: 16px;
+            font-size: 15px;
+            background: #ffffff;
+            color: #212529;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+        }
+
+        input[type="text"]::placeholder {
+            color: #adb5bd;
+            font-weight: 400;
+        }
+
+        /* Audio Controls */
+        .audio-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            padding: 20px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            border-radius: 16px;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        .audio-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: #868e96;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 12px;
+            background: white;
+            transition: all 0.3s ease;
+        }
+
+        .audio-status.active {
+            color: #37b24d;
+            background: #d3f9d8;
+            box-shadow: 0 2px 8px rgba(51, 207, 102, 0.2);
+        }
+
+        .mic-icon {
+            width: 20px;
+            height: 20px;
+        }
+
+        /* Event Log (collapsed by default) */
+        .event-log-container {
+            margin-top: 28px;
+        }
+
+        .event-log-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            border-radius: 16px;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .event-log-header:hover {
+            background: linear-gradient(135deg, #e9ecef 0%, #f8f9fa 100%);
+            transform: translateY(-1px);
+        }
+
+        .event-log-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: #868e96;
+            font-weight: 600;
+        }
+
+        #eventLogToggle {
+            font-size: 18px;
+            color: #868e96;
+            font-weight: 300;
+        }
+
+        #eventLog {
+            display: none;
+            height: 200px;
+            overflow-y: auto;
+            padding: 16px;
+            background: #f8f9fa;
+            border-radius: 0 0 16px 16px;
+            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+            font-size: 11px;
+            margin-top: 4px;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            border-top: none;
+        }
+
+        #eventLog::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #eventLog::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #eventLog::-webkit-scrollbar-thumb {
+            background: #dee2e6;
+            border-radius: 10px;
+        }
+
+        #eventLog.show {
+            display: block;
+        }
+
+        .event-entry {
+            margin-bottom: 6px;
+            padding: 6px 10px;
+            border-radius: 6px;
+            border-left: 3px solid transparent;
+        }
+
+        .event-entry.sent {
+            background: #e7f5ff;
+            color: #1864ab;
+            border-left-color: #4263eb;
+        }
+
+        .event-entry.received {
+            background: #d3f9d8;
+            color: #087f5b;
+            border-left-color: #20c997;
+        }
+
+        .event-entry.error {
+            background: #ffe3e3;
+            color: #c92a2a;
+            border-left-color: #ff6b6b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🌐 Real-time Interpretation</h2>
+        <p style="text-align: center; color: #868e96; font-size: 13px; margin-top: -24px; margin-bottom: 24px; font-weight: 500;">
+            Powered by Gemini Live • 70% faster • Ultra-low latency
+        </p>
+
+        <div class="status-bar">
+            <div class="status-info">
+                <div id="status" class="disconnected">Disconnected</div>
+                <div id="sessionId"></div>
+            </div>
+            <button id="connectBtn">Connect</button>
+        </div>
+
+        <!-- Real-time Subtitles -->
+        <div class="subtitle-container">
+            <div class="subtitle-label">Live Transcript</div>
+            <div id="userSubtitle" class="subtitle-text empty">Waiting for speech...</div>
+            <div id="assistantSubtitle" class="subtitle-text assistant" style="margin-top: 12px;"></div>
+        </div>
+
+        <!-- Text Input -->
+        <div class="input-group">
+            <input type="text" id="messageInput" placeholder="Type a message or just speak..." disabled>
+            <button id="sendBtn" disabled>Send</button>
+        </div>
+
+        <!-- Conversation History -->
+        <div class="conversation-container">
+            <div class="conversation-label">Conversation</div>
+            <div id="conversation"></div>
+        </div>
+
+        <!-- Audio Controls -->
+        <div class="audio-controls">
+            <div id="micStatus" class="audio-status">
+                <svg class="mic-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                </svg>
+                <span>Microphone Off</span>
+            </div>
+            <div id="speakerStatus" class="audio-status">
+                <svg class="mic-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                </svg>
+                <span>Speaker Ready</span>
+            </div>
+        </div>
+
+        <!-- Event Log (Debug) -->
+        <div class="event-log-container">
+            <div class="event-log-header" onclick="toggleEventLog()">
+                <span class="event-log-title">Event Log</span>
+                <span id="eventLogToggle">+</span>
+            </div>
+            <div id="eventLog"></div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let pc = null;
+        let dc = null;
+        let audioEl = null;
+        let sessionId = null;
+        let currentResponseId = null;
+        let currentItemId = null;
+        let assistantTranscript = '';
+        let userTranscript = '';
+        let isUserSpeaking = false;
+
+        // DOM Elements
+        const statusEl = document.getElementById('status');
+        const sessionIdEl = document.getElementById('sessionId');
+        const connectBtn = document.getElementById('connectBtn');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const conversationEl = document.getElementById('conversation');
+        const userSubtitleEl = document.getElementById('userSubtitle');
+        const assistantSubtitleEl = document.getElementById('assistantSubtitle');
+        const micStatusEl = document.getElementById('micStatus');
+        const eventLogEl = document.getElementById('eventLog');
+
+        // Toggle event log visibility
+        function toggleEventLog() {
+            eventLogEl.classList.toggle('show');
+            document.getElementById('eventLogToggle').textContent =
+                eventLogEl.classList.contains('show') ? '-' : '+';
+        }
+
+        // Log events
+        function logEvent(type, data) {
+            const entry = document.createElement('div');
+            entry.className = `event-entry ${type}`;
+            const time = new Date().toLocaleTimeString();
+            const text = typeof data === 'string' ? data : JSON.stringify(data);
+            entry.textContent = `[${time}] ${text.substring(0, 200)}${text.length > 200 ? '...' : ''}`;
+            eventLogEl.appendChild(entry);
+            eventLogEl.scrollTop = eventLogEl.scrollHeight;
+        }
+
+        // Update status
+        function setStatus(status, text) {
+            statusEl.className = status;
+            statusEl.textContent = text;
+        }
+
+        // Add message to conversation
+        function addMessage(role, content) {
+            const msg = document.createElement('div');
+            msg.className = `message ${role}`;
+            msg.innerHTML = `
+                <div class="role">${role === 'user' ? 'You' : 'Assistant'}</div>
+                <div class="content">${content}</div>
+                <div class="timestamp">${new Date().toLocaleTimeString()}</div>
+            `;
+            conversationEl.appendChild(msg);
+            conversationEl.scrollTop = conversationEl.scrollHeight;
+        }
+
+        // Handle incoming Realtime API events
+        function handleServerEvent(event) {
+            logEvent('received', `${event.type}`);
+
+            switch (event.type) {
+                case 'session.created':
+                    sessionId = event.session.id;
+                    sessionIdEl.textContent = `Session: ${sessionId}`;
+                    logEvent('received', `Session created: ${sessionId}`);
+                    break;
+
+                case 'session.updated':
+                    logEvent('received', 'Session updated');
+                    break;
+
+                case 'input_audio_buffer.speech_started':
+                    isUserSpeaking = true;
+                    userSubtitleEl.className = 'subtitle-text user';
+                    userSubtitleEl.innerHTML = 'Listening...<span class="speaking-indicator"></span>';
+                    break;
+
+                case 'input_audio_buffer.speech_stopped':
+                    isUserSpeaking = false;
+                    if (userTranscript) {
+                        userSubtitleEl.textContent = userTranscript;
+                    } else {
+                        userSubtitleEl.innerHTML = 'Processing...';
+                    }
+                    break;
+
+                case 'conversation.item.input_audio_transcription.completed':
+                    // User's speech has been transcribed
+                    userTranscript = event.transcript || '';
+                    userSubtitleEl.className = 'subtitle-text user';
+                    userSubtitleEl.textContent = userTranscript || '(no speech detected)';
+                    if (userTranscript) {
+                        addMessage('user', userTranscript);
+                    }
+                    break;
+
+                case 'response.created':
+                    currentResponseId = event.response.id;
+                    assistantTranscript = '';
+                    assistantSubtitleEl.textContent = '';
+                    break;
+
+                case 'response.output_item.added':
+                    currentItemId = event.item?.id;
+                    break;
+
+                case 'response.audio_transcript.delta':
+                    // Streaming transcript of assistant's audio response
+                    assistantTranscript += event.delta || '';
+                    assistantSubtitleEl.innerHTML = assistantTranscript + '<span class="speaking-indicator"></span>';
+                    break;
+
+                case 'response.audio_transcript.done':
+                    assistantSubtitleEl.textContent = event.transcript || assistantTranscript;
+                    break;
+
+                case 'response.text.delta':
+                    // Text response delta
+                    assistantTranscript += event.delta || '';
+                    assistantSubtitleEl.textContent = assistantTranscript;
+                    break;
+
+                case 'response.text.done':
+                    assistantSubtitleEl.textContent = event.text || assistantTranscript;
+                    break;
+
+                case 'response.done':
+                    // Response complete
+                    if (assistantTranscript) {
+                        addMessage('assistant', assistantTranscript);
+                    }
+                    assistantTranscript = '';
+                    currentResponseId = null;
+                    currentItemId = null;
+                    break;
+
+                case 'response.audio.delta':
+                    // Audio data - handled by WebRTC track
+                    break;
+
+                case 'error':
+                    logEvent('error', `Error: ${event.error?.message || 'Unknown error'}`);
+                    break;
+
+                default:
+                    // Log other events for debugging
+                    break;
+            }
+        }
+
+        // Send Realtime API event
+        function sendEvent(event) {
+            if (dc && dc.readyState === 'open') {
+                const eventWithId = {
+                    event_id: 'evt_' + Math.random().toString(36).substr(2, 9),
+                    ...event
+                };
+                dc.send(JSON.stringify(eventWithId));
+                logEvent('sent', event.type);
+            }
+        }
+
+        // Send text message
+        function sendTextMessage(text) {
+            if (!text.trim()) return;
+
+            // Create conversation item with text
+            sendEvent({
+                type: 'conversation.item.create',
+                item: {
+                    type: 'message',
+                    role: 'user',
+                    content: [{
+                        type: 'input_text',
+                        text: text
+                    }]
+                }
+            });
+
+            // Request response
+            sendEvent({
+                type: 'response.create'
+            });
+
+            addMessage('user', text);
+            messageInput.value = '';
+        }
+
+        // Connect to WebRTC server
+        async function connect() {
+            try {
+                setStatus('connecting', 'Connecting...');
+                connectBtn.disabled = true;
+
+                // Create RTCPeerConnection
+                pc = new RTCPeerConnection();
+
+                // Create Data Channel for Realtime API events
+                dc = pc.createDataChannel('oai-events');
+
+                dc.onopen = () => {
+                    setStatus('connected', 'Connected');
+                    connectBtn.textContent = 'Disconnect';
+                    connectBtn.className = 'disconnect';
+                    connectBtn.disabled = false;
+                    messageInput.disabled = false;
+                    sendBtn.disabled = false;
+                    micStatusEl.classList.add('active');
+                    micStatusEl.querySelector('span').textContent = 'Microphone Active';
+                    logEvent('received', 'DataChannel opened');
+                };
+
+                dc.onclose = () => {
+                    logEvent('received', 'DataChannel closed');
+                };
+
+                dc.onmessage = (e) => {
+                    try {
+                        const decoder = new TextDecoder('utf-8');
+                        const jsonString = typeof e.data === 'string' ? e.data : decoder.decode(e.data);
+                        const event = JSON.parse(jsonString);
+                        handleServerEvent(event);
+                    } catch (err) {
+                        console.error('Failed to parse event:', err);
+                        logEvent('error', 'Failed to parse event');
+                    }
+                };
+
+                // Create audio element for playback
+                audioEl = document.createElement('audio');
+                audioEl.autoplay = true;
+
+                pc.ontrack = (e) => {
+                    console.log('Received audio track');
+                    audioEl.srcObject = e.streams[0];
+                    logEvent('received', 'Audio track received');
+                };
+
+                // Get microphone access
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+
+                // Add audio track
+                await pc.addTransceiver(stream.getAudioTracks()[0], {
+                    direction: 'sendrecv'
+                });
+
+                // Create and send offer
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                // Wait for ICE gathering
+                await new Promise(resolve => {
+                    if (pc.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        pc.addEventListener('icegatheringstatechange', () => {
+                            if (pc.iceGatheringState === 'complete') {
+                                resolve();
+                            }
+                        });
+                    }
+                });
+
+                // Send offer to server
+                const response = await fetch('/session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(pc.localDescription)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                // Set remote description
+                if (data.sdp) {
+                    await pc.setRemoteDescription(data.sdp);
+                } else {
+                    await pc.setRemoteDescription(data);
+                }
+
+                if (data.session_id) {
+                    sessionId = data.session_id;
+                    sessionIdEl.textContent = `Session: ${sessionId}`;
+                }
+
+                logEvent('received', 'WebRTC connected');
+
+            } catch (err) {
+                console.error('Connection failed:', err);
+                setStatus('disconnected', 'Connection Failed');
+                connectBtn.disabled = false;
+                connectBtn.textContent = 'Connect';
+                connectBtn.className = '';
+                logEvent('error', `Connection failed: ${err.message}`);
+            }
+        }
+
+        // Disconnect
+        function disconnect() {
+            if (dc) {
+                dc.close();
+                dc = null;
+            }
+            if (pc) {
+                pc.close();
+                pc = null;
+            }
+            if (audioEl) {
+                audioEl.srcObject = null;
+                audioEl = null;
+            }
+
+            sessionId = null;
+            sessionIdEl.textContent = '';
+            setStatus('disconnected', 'Disconnected');
+            connectBtn.textContent = 'Connect';
+            connectBtn.className = '';
+            messageInput.disabled = true;
+            sendBtn.disabled = true;
+            micStatusEl.classList.remove('active');
+            micStatusEl.querySelector('span').textContent = 'Microphone Off';
+            userSubtitleEl.className = 'subtitle-text empty';
+            userSubtitleEl.textContent = 'Waiting for speech...';
+            assistantSubtitleEl.textContent = '';
+        }
+
+        // Event Listeners
+        connectBtn.onclick = () => {
+            if (pc && pc.connectionState === 'connected') {
+                disconnect();
+            } else {
+                connect();
+            }
+        };
+
+        sendBtn.onclick = () => {
+            sendTextMessage(messageInput.value);
+        };
+
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendTextMessage(messageInput.value);
+            }
+        });
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            disconnect();
+        });
+    </script>
+</body>
+</html>

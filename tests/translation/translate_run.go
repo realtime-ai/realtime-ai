@@ -23,7 +23,7 @@ func main() {
 	timeout := flag.Duration("timeout", 45*time.Second, "Overall timeout for the translation")
 	flag.Parse()
 
-	_ = godotenv.Load(".env")
+	_ = godotenv.Overload(".env")
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if *provider == "gemini" {

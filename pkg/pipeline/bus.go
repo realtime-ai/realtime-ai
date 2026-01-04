@@ -65,8 +65,12 @@ type TextDeltaPayload struct {
 
 // VADPayload is the payload for VAD events
 type VADPayload struct {
-	AudioMs int    // Audio position in milliseconds
-	ItemID  string // Associated item ID
+	AudioMs      int     // Audio position in milliseconds
+	ItemID       string  // Associated item ID
+	Confidence   float32 // Speech probability at detection time
+	PreRollAudio []byte  // Pre-roll audio data before speech start (only for VADSpeechStart)
+	SampleRate   int     // Sample rate of PreRollAudio
+	Channels     int     // Number of channels in PreRollAudio
 }
 
 // Bus 定义了事件总线的接口

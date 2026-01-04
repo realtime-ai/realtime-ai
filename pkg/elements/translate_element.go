@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -113,7 +114,13 @@ func (e *TranslateElement) Start(ctx context.Context) error {
 	// Initialize the appropriate client
 	var err error
 	if e.config.Provider == "openai" {
-		client := openai.NewClient(option.WithAPIKey(e.config.APIKey))
+		opts := []option.RequestOption{
+			option.WithAPIKey(e.config.APIKey),
+		}
+		if baseURL := os.Getenv("OPENAI_BASE_URL"); baseURL != "" {
+			opts = append(opts, option.WithBaseURL(baseURL))
+		}
+		client := openai.NewClient(opts...)
 		e.openaiClient = &client
 	} else if e.config.Provider == "gemini" {
 		e.geminiClient, err = genai.NewClient(ctx, &genai.ClientConfig{

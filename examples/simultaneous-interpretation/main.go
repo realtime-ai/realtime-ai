@@ -54,16 +54,19 @@ func main() {
 
 	log.Println("=== Real-time Simultaneous Interpretation ===")
 	log.Println("This demo demonstrates:")
-	log.Println("  - Speech-to-Text using OpenAI Whisper")
+	log.Println("  - Speech-to-Text using ElevenLabs Scribe V2 Realtime (~150ms latency)")
 	log.Println("  - Real-time translation using GPT/Gemini")
 	log.Println("  - Text-to-Speech using OpenAI TTS")
 	log.Println("  - Voice Activity Detection (VAD) using Silero")
 	log.Println("  - Complete audio-to-audio interpretation")
 	log.Println()
 
-	// Check for required API key
+	// Check for required API keys
+	if os.Getenv("ELEVENLABS_API_KEY") == "" {
+		log.Fatal("ELEVENLABS_API_KEY environment variable is required")
+	}
 	if os.Getenv("OPENAI_API_KEY") == "" {
-		log.Fatal("OPENAI_API_KEY environment variable is required")
+		log.Fatal("OPENAI_API_KEY environment variable is required (for translation and TTS)")
 	}
 
 	// Get configuration from environment variables
@@ -198,7 +201,7 @@ func createInterpretationPipeline(
 	// PART 1: Audio Input Processing (Speech Recognition)
 	// ============================================================
 
-	// 1. Audio Resample Element (ensure 16kHz for Whisper)
+	// 1. Audio Resample Element (ensure 16kHz for ElevenLabs)
 	// AudioResampleElement(inputRate, outputRate, inputChannels, outputChannels)
 	resample16k := elements.NewAudioResampleElement(48000, 16000, 1, 1)
 	p.AddElement(resample16k)
@@ -218,30 +221,35 @@ func createInterpretationPipeline(
 	if err != nil {
 		log.Printf("  [2] VAD not available (build with -tags vad to enable): %v", err)
 	} else {
-		vadElement = vadElem
-		p.AddElement(vadElement)
-		log.Println("  [2] SileroVADElement (Voice Activity Detection)")
+		// Initialize VAD detector before adding to pipeline
+		if err := vadElem.Init(context.Background()); err != nil {
+			log.Printf("  [2] VAD initialization failed: %v", err)
+		} else {
+			vadElement = vadElem
+			p.AddElement(vadElement)
+			log.Println("  [2] SileroVADElement (Voice Activity Detection)")
+		}
 	}
 
-	// 3. Whisper STT Element (Speech Recognition)
-	whisperConfig := elements.WhisperSTTConfig{
-		APIKey:               os.Getenv("OPENAI_API_KEY"),
+	// 3. ElevenLabs Realtime STT Element (Speech Recognition)
+	// ElevenLabs Scribe V2 provides ~150ms latency real-time ASR
+	elevenLabsConfig := elements.ElevenLabsRealtimeSTTConfig{
+		APIKey:               os.Getenv("ELEVENLABS_API_KEY"),
 		Language:             sourceLang,
-		Model:                "whisper-1",
-		EnablePartialResults: false, // Only final results for better translation
+		Model:                "", // Use default scribe_v2_realtime
+		EnablePartialResults: true,
 		VADEnabled:           vadElement != nil,
 		SampleRate:           16000,
 		Channels:             1,
 		BitsPerSample:        16,
-		Prompt:               "",
 	}
 
-	whisperElement, err := elements.NewWhisperSTTElement(whisperConfig)
+	sttElement, err := elements.NewElevenLabsRealtimeSTTElement(elevenLabsConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Whisper STT element: %v", err)
+		return nil, fmt.Errorf("failed to create ElevenLabs STT element: %v", err)
 	}
-	p.AddElement(whisperElement)
-	log.Printf("  [3] WhisperSTTElement (Language: %s)", sourceLang)
+	p.AddElement(sttElement)
+	log.Printf("  [3] ElevenLabsRealtimeSTTElement (Language: %s, ~150ms latency)", sourceLang)
 
 	// ============================================================
 	// PART 2: Translation
@@ -308,19 +316,19 @@ func createInterpretationPipeline(
 
 	log.Println("\nLinking pipeline elements:")
 
-	// Input path: Audio → Resample → VAD → Whisper
+	// Input path: Audio → Resample → VAD → ElevenLabs STT
 	if vadElement != nil {
 		p.Link(resample16k, vadElement)
-		p.Link(vadElement, whisperElement)
-		log.Println("  Audio Input → Resample(16kHz) → VAD → Whisper STT")
+		p.Link(vadElement, sttElement)
+		log.Println("  Audio Input → Resample(16kHz) → VAD → ElevenLabs STT")
 	} else {
-		p.Link(resample16k, whisperElement)
-		log.Println("  Audio Input → Resample(16kHz) → Whisper STT")
+		p.Link(resample16k, sttElement)
+		log.Println("  Audio Input → Resample(16kHz) → ElevenLabs STT")
 	}
 
-	// Translation path: Whisper → Translate
-	p.Link(whisperElement, translateElement)
-	log.Println("  Whisper STT → Translate")
+	// Translation path: ElevenLabs STT → Translate
+	p.Link(sttElement, translateElement)
+	log.Println("  ElevenLabs STT → Translate")
 
 	// Output path: Translate → TTS → Resample → Opus → Audio Output
 	p.Link(translateElement, ttsElement)

@@ -52,7 +52,13 @@ func NewOpenAIRealtimeAPIElement() *OpenAIRealtimeAPIElement {
 
 func (e *OpenAIRealtimeAPIElement) Start(ctx context.Context) error {
 
-	client := openairt.NewClient(os.Getenv("OPENAI_API_KEY"))
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	// baseURL := os.Getenv("OPENAI_BASE_URL")
+
+	client := openairt.NewClient(apiKey)
+	// if baseURL != "" {
+	// 	client.BaseURL = baseURL
+	// }
 	conn, err := client.Connect(context.Background())
 	if err != nil {
 		return err
