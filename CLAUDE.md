@@ -141,6 +141,21 @@ func (e *MyElement) Stop() error {
 | `pkg/audio` | 音频工具 |
 | `pkg/trace` | OpenTelemetry 追踪 |
 
+## 测试资源
+
+### 测试音频文件 (`tests/audiofiles/`)
+
+| 文件 | 格式 | 说明 |
+|------|------|------|
+| `vad_test_en.wav` | 16kHz mono | VAD/ASR/同传测试用英语语音 |
+| `test_speech.wav` | 16kHz mono | 快速测试用短语音 |
+
+生成测试音频：
+```bash
+# 生成 5 秒 440Hz 正弦波测试音频
+ffmpeg -f lavfi -i "sine=frequency=440:duration=5" -ar 16000 -ac 1 tests/audiofiles/test.wav
+```
+
 ## 文档索引
 
 - `docs/grpc-architecture.md` - gRPC 架构
@@ -148,3 +163,4 @@ func (e *MyElement) Stop() error {
 - `pkg/asr/README.md` - ASR 接口
 - `pkg/tts/README.md` - TTS 接口
 - `pkg/elements/VAD_README.md` - VAD 配置
+- `tests/audiofiles/README.md` - 测试音频说明

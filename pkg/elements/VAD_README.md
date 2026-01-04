@@ -15,21 +15,21 @@ Voice Activity Detection (VAD) element using Silero VAD for real-time speech det
 
 ## Build Requirements
 
-VAD is included by default and requires additional dependencies:
+VAD uses the `vad` build tag and requires the ONNX Runtime shared library.
 
 ### System Dependencies
 
-1. **ONNX Runtime v1.18.1**
+1. **ONNX Runtime v1.20.1** (or compatible version)
    ```bash
    # Ubuntu/Debian
-   wget https://github.com/microsoft/onnxruntime/releases/download/v1.18.1/onnxruntime-linux-x64-1.18.1.tgz
-   tar -xzf onnxruntime-linux-x64-1.18.1.tgz
-   sudo cp -r onnxruntime-linux-x64-1.18.1/include/* /usr/local/include/
-   sudo cp -r onnxruntime-linux-x64-1.18.1/lib/* /usr/local/lib/
-   sudo ldconfig
+   wget https://github.com/microsoft/onnxruntime/releases/download/v1.20.1/onnxruntime-linux-x64-1.20.1.tgz
+   tar -xzf onnxruntime-linux-x64-1.20.1.tgz
+   export ONNXRUNTIME_LIB=$(pwd)/onnxruntime-linux-x64-1.20.1/lib/libonnxruntime.so
+   export LD_LIBRARY_PATH=$(pwd)/onnxruntime-linux-x64-1.20.1/lib:$LD_LIBRARY_PATH
 
    # macOS
    brew install onnxruntime
+   # Library is auto-detected at /opt/homebrew/lib/libonnxruntime.dylib
    ```
 
 2. **Silero VAD Model**
@@ -41,15 +41,27 @@ VAD is included by default and requires additional dependencies:
 ### Building
 
 ```bash
-# Build
-go build ./...
+# Build with VAD support
+go build -tags vad ./...
 
-# Run tests
-go test ./pkg/elements/...
+# Run tests with VAD
+go test -tags vad ./pkg/vad/...
+go test -tags vad ./pkg/elements/...
 
-# Build examples
-go build ./examples/...
+# Build examples with VAD
+go build -tags vad ./examples/...
 ```
+
+### Implementation Notes
+
+The VAD implementation uses [yalue/onnxruntime_go](https://github.com/yalue/onnxruntime_go) v1.17.0 for ONNX model inference. This provides a pure Go wrapper around the ONNX Runtime C API, eliminating the need for custom CGO code.
+
+**Version Compatibility**:
+| onnxruntime_go | ONNX Runtime |
+|----------------|--------------|
+| v1.17.0        | 1.20.x       |
+| v1.18.0        | 1.21.x       |
+| v1.19.0+       | 1.22.x+      |
 
 ## Usage
 
