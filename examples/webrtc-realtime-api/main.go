@@ -70,6 +70,13 @@ if err := http.ListenAndServe(":8081", nil); err != nil {
 func createPipeline(ctx context.Context, session *realtimeapi.Session, apiKey string) (*pipeline.Pipeline, error) {
 	p := pipeline.NewPipeline("webrtc-realtime-" + session.ID)
 
+	// Enable interrupt manager with hybrid mode for best user experience
+	// Hybrid mode: VAD provides fast response, API confirms accuracy
+	interruptConfig := pipeline.DefaultInterruptConfig()
+	interruptConfig.EnableHybridMode = true
+	interruptConfig.MinSpeechForConfirmMs = 300 // Confirm interrupt after 300ms speech
+	p.EnableInterruptManager(interruptConfig)
+
 	if apiKey != "" {
 		// Full pipeline with Gemini AI
 		// Input: WebRTC audio at 48kHz
@@ -90,7 +97,7 @@ func createPipeline(ctx context.Context, session *realtimeapi.Session, apiKey st
 		p.Link(inputResample, gemini)
 		p.Link(gemini, outputResample)
 
-		log.Printf("[Pipeline] Created Gemini pipeline for session %s", session.ID)
+		log.Printf("[Pipeline] Created Gemini pipeline for session %s with interrupt support", session.ID)
 	} else {
 		// Echo pipeline for testing without API key
 		echo := NewEchoElement()

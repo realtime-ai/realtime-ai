@@ -39,6 +39,9 @@ const (
 	ServerEventTypeResponseFunctionCallArgumentsDelta           ServerEventType = "response.function_call_arguments.delta"
 	ServerEventTypeResponseFunctionCallArgumentsDone            ServerEventType = "response.function_call_arguments.done"
 	ServerEventTypeRateLimitsUpdated                            ServerEventType = "rate_limits.updated"
+
+	// Custom events (extensions to OpenAI Realtime API)
+	ServerEventTypeResponseInterrupted ServerEventType = "response.interrupted" // Response was interrupted by user speech
 )
 
 // ServerEvent is the interface for all server events.
@@ -489,6 +492,26 @@ func NewRateLimitsUpdatedEvent(rateLimits []RateLimit) *RateLimitsUpdatedEvent {
 	return &RateLimitsUpdatedEvent{
 		BaseServerEvent: NewBaseServerEvent(ServerEventTypeRateLimitsUpdated),
 		RateLimits:      rateLimits,
+	}
+}
+
+// ResponseInterruptedEvent is sent when a response is interrupted by user speech.
+// This is a custom extension to the OpenAI Realtime API.
+type ResponseInterruptedEvent struct {
+	BaseServerEvent
+	ResponseID  string `json:"response_id"`            // ID of the interrupted response
+	ItemID      string `json:"item_id"`                // ID of the interrupted item
+	AudioMs     int    `json:"audio_ms"`               // Audio position at interrupt (milliseconds)
+	Reason      string `json:"reason"`                 // Reason for interrupt (e.g., "user_speech_detected")
+}
+
+func NewResponseInterruptedEvent(responseID, itemID string, audioMs int, reason string) *ResponseInterruptedEvent {
+	return &ResponseInterruptedEvent{
+		BaseServerEvent: NewBaseServerEvent(ServerEventTypeResponseInterrupted),
+		ResponseID:      responseID,
+		ItemID:          itemID,
+		AudioMs:         audioMs,
+		Reason:          reason,
 	}
 }
 
