@@ -34,10 +34,20 @@ Client (Browser) → WebRTC Gateway → AI Pipeline
 
 **macOS:**
 ```bash
-brew install opus ffmpeg
+brew install opus ffmpeg go
 ```
 
-**Ubuntu/Debian:**
+**Ubuntu/Debian (推荐使用安装脚本):**
+```bash
+# 使用预编译 FFmpeg (更稳定)
+./scripts/setup-ffmpeg.sh
+eval "$(./scripts/setup-ffmpeg.sh --env)"
+
+# 安装其他依赖
+apt-get install pkg-config libopus-dev
+```
+
+**Ubuntu/Debian (手动安装):**
 ```bash
 apt-get install pkg-config libopus-dev libavcodec-dev libavformat-dev libavutil-dev libswresample-dev
 ```

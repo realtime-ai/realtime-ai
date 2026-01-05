@@ -13,9 +13,14 @@ Realtime AI 是一个实时 AI 框架，采用 **GStreamer 风格的 Pipeline �
 ## 常用命令
 
 ```bash
-# 依赖安装
+# 依赖安装 (macOS)
 brew install opus ffmpeg go
 go mod download
+
+# 依赖安装 (Linux) - 推荐使用预编译 FFmpeg
+./scripts/setup-ffmpeg.sh
+eval "$(./scripts/setup-ffmpeg.sh --env)"
+sudo apt-get install pkg-config libopus-dev
 
 # 构建
 go build ./...                    # 标准构建
