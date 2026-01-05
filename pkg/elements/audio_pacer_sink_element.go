@@ -254,7 +254,7 @@ func (e *AudioPacerSinkElement) handleInterrupt(event pipeline.Event) {
 		Type:      pipeline.EventInterruptAcknowledged,
 		Timestamp: time.Now(),
 		Payload: map[string]interface{}{
-			"source":     e.Name(),
+			"source":     e.GetName(),
 			"fadeOutMs":  e.fadeOutMs,
 			"clearedAt":  time.Now().UnixMilli(),
 		},

@@ -1,5 +1,3 @@
-//go:build vad
-
 // Simple VAD integration test using only the vad package.
 package main
 

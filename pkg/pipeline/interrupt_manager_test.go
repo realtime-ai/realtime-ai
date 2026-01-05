@@ -2,12 +2,14 @@ package pipeline
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 )
 
 // mockBus 用于测试的 mock Bus 实现
 type mockBus struct {
+	mu          sync.RWMutex
 	subscribers map[EventType][]chan<- Event
 	published   []Event
 }
@@ -20,10 +22,14 @@ func newMockBus() *mockBus {
 }
 
 func (b *mockBus) Subscribe(eventType EventType, ch chan<- Event) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	b.subscribers[eventType] = append(b.subscribers[eventType], ch)
 }
 
 func (b *mockBus) Unsubscribe(eventType EventType, ch chan<- Event) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	chans := b.subscribers[eventType]
 	for i, c := range chans {
 		if c == ch {
@@ -35,9 +41,15 @@ func (b *mockBus) Unsubscribe(eventType EventType, ch chan<- Event) {
 }
 
 func (b *mockBus) Publish(evt Event) bool {
+	b.mu.Lock()
 	b.published = append(b.published, evt)
-	// 分发给订阅者
-	for _, ch := range b.subscribers[evt.Type] {
+	// Copy subscribers to avoid holding lock during send
+	chans := make([]chan<- Event, len(b.subscribers[evt.Type]))
+	copy(chans, b.subscribers[evt.Type])
+	b.mu.Unlock()
+
+	// 分发给订阅者 (without lock to avoid deadlock)
+	for _, ch := range chans {
 		select {
 		case ch <- evt:
 		default:
@@ -53,6 +65,8 @@ func (b *mockBus) Start(ctx context.Context) error {
 func (b *mockBus) Stop() {}
 
 func (b *mockBus) getPublishedEvents(eventType EventType) []Event {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 	var events []Event
 	for _, evt := range b.published {
 		if evt.Type == eventType {
@@ -60,6 +74,12 @@ func (b *mockBus) getPublishedEvents(eventType EventType) []Event {
 		}
 	}
 	return events
+}
+
+func (b *mockBus) clearPublished() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.published = b.published[:0]
 }
 
 func TestInterruptManager_DefaultConfig(t *testing.T) {
@@ -165,7 +185,7 @@ func TestInterruptManager_VADInterrupt(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// 清空已发布的事件
-	bus.published = bus.published[:0]
+	bus.clearPublished()
 
 	// VAD 检测到语音开始
 	bus.Publish(Event{
@@ -213,7 +233,7 @@ func TestInterruptManager_Cooldown(t *testing.T) {
 	im.lastInterruptAt = time.Now()
 	im.mu.Unlock()
 
-	bus.published = bus.published[:0]
+	bus.clearPublished()
 
 	// VAD 检测到语音开始（应该被冷却阻止）
 	bus.Publish(Event{
@@ -244,7 +264,7 @@ func TestInterruptManager_ManualInterrupt(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// 不在 AI 响应状态时的手动打断应该被忽略
-	bus.published = bus.published[:0]
+	bus.clearPublished()
 	im.TriggerManualInterrupt()
 	time.Sleep(10 * time.Millisecond)
 
@@ -261,7 +281,7 @@ func TestInterruptManager_ManualInterrupt(t *testing.T) {
 	})
 	time.Sleep(10 * time.Millisecond)
 
-	bus.published = bus.published[:0]
+	bus.clearPublished()
 
 	// 手动打断
 	im.TriggerManualInterrupt()
@@ -305,7 +325,7 @@ func TestInterruptManager_HybridMode_ShortSpeech(t *testing.T) {
 	})
 	time.Sleep(10 * time.Millisecond)
 
-	bus.published = bus.published[:0]
+	bus.clearPublished()
 
 	// VAD 检测到语音开始
 	bus.Publish(Event{
