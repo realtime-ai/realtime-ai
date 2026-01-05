@@ -1,3 +1,5 @@
+//go:build vad
+
 package vad
 
 import (
