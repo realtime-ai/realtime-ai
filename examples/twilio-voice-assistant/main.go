@@ -229,13 +229,12 @@ func (f *voiceAssistantFactory) CreatePipeline(ctx context.Context, conn *connec
 
 	// 3. Chat Element (using ChatElement for GPT)
 	chatElem, err := elements.NewChatElement(elements.ChatConfig{
-		Provider:         "openai",
-		APIKey:           f.config.OpenAIAPIKey,
-		Model:            "gpt-4o-mini",
-		SystemPrompt:     f.config.SystemPrompt,
-		MaxTokens:        150, // Keep responses short for phone
-		Temperature:      0.7,
-		MaxHistoryLength: 10,
+		APIKey:       f.config.OpenAIAPIKey,
+		Model:        "gpt-4o-mini",
+		SystemPrompt: f.config.SystemPrompt,
+		MaxTokens:    150, // Keep responses short for phone
+		Temperature:  0.7,
+		MaxHistory:   10,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create chat element: %w", err)

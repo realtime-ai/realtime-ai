@@ -27,6 +27,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -375,10 +376,16 @@ func shouldFlushSentence(text string) bool {
 		return false
 	}
 
-	lastChar := trimmed[len(trimmed)-1]
+	// Use DecodeLastRuneInString to correctly handle multi-byte UTF-8 characters
+	// like Chinese punctuation (。！？etc.)
+	lastRune, _ := utf8.DecodeLastRuneInString(trimmed)
+	if lastRune == utf8.RuneError {
+		return false
+	}
+
 	sentenceEnders := ".!?;:。！？；："
 
-	return strings.ContainsRune(sentenceEnders, rune(lastChar))
+	return strings.ContainsRune(sentenceEnders, lastRune)
 }
 
 // truncateForLog truncates text for logging
