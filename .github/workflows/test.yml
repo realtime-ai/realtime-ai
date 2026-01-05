@@ -21,53 +21,29 @@ jobs:
         go-version: '1.23'
         cache: true
 
+    # Use prebuilt FFmpeg from BtbN/FFmpeg-Builds for stability
+    # This is much faster and more reliable than building from source
     - name: Cache FFmpeg
       id: cache-ffmpeg
       uses: actions/cache@v4
       with:
         path: ~/ffmpeg
-        key: ffmpeg-7.0-${{ runner.os }}
+        key: ffmpeg-7.0-prebuilt-${{ runner.os }}-v2
 
-    - name: Install build dependencies
+    - name: Install FFmpeg dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y \
-          build-essential \
-          pkg-config \
-          yasm \
-          nasm \
-          libopus-dev \
-          libopusfile-dev \
-          libx264-dev \
-          libx265-dev \
-          libvpx-dev \
-          libmp3lame-dev
+        sudo apt-get install -y pkg-config
 
-    - name: Build and install FFmpeg from source
+    - name: Download prebuilt FFmpeg
       if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
       run: |
         cd ~
-        wget -q https://ffmpeg.org/releases/ffmpeg-7.0.tar.xz
-        tar xf ffmpeg-7.0.tar.xz
-        cd ffmpeg-7.0
-        ./configure \
-          --prefix=$HOME/ffmpeg \
-          --enable-gpl \
-          --enable-version3 \
-          --enable-libopus \
-          --enable-libx264 \
-          --enable-libx265 \
-          --enable-libvpx \
-          --enable-libmp3lame \
-          --enable-shared \
-          --disable-static \
-          --enable-pic \
-          --enable-avfilter \
-          --enable-avdevice \
-          --enable-swscale \
-          --enable-postproc
-        make -j$(nproc)
-        make install
+        # Download FFmpeg 7.0 shared build from BtbN
+        # Using gpl-shared variant which includes libav* shared libraries
+        wget -q https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2024-07-31-12-50/ffmpeg-n7.0.1-linux64-gpl-shared-7.0.tar.xz
+        tar xf ffmpeg-n7.0.1-linux64-gpl-shared-7.0.tar.xz
+        mv ffmpeg-n7.0.1-linux64-gpl-shared-7.0 ffmpeg
 
     - name: Set FFmpeg environment variables
       run: |
@@ -79,16 +55,11 @@ jobs:
 
     - name: Verify FFmpeg installation
       run: |
-        export PKG_CONFIG_PATH=$HOME/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH
-        export LD_LIBRARY_PATH=$HOME/ffmpeg/lib:$LD_LIBRARY_PATH
         echo "FFmpeg version:"
         $HOME/ffmpeg/bin/ffmpeg -version
         echo ""
-        echo "pkg-config --modversion output:"
-        pkg-config --modversion libavcodec libavdevice libavfilter libavformat libswresample libswscale libavutil
-        echo ""
-        echo "pkg-config --cflags output:"
-        pkg-config --cflags libavcodec libavdevice libavfilter libavformat libswresample libswscale libavutil
+        echo "pkg-config libraries:"
+        pkg-config --modversion libavcodec libavformat libswresample libavutil || true
 
     - name: Download Go modules
       run: go mod download
@@ -132,53 +103,27 @@ jobs:
         go-version: '1.23'
         cache: true
 
+    # Use prebuilt FFmpeg from BtbN/FFmpeg-Builds for stability
     - name: Cache FFmpeg
       id: cache-ffmpeg
       uses: actions/cache@v4
       with:
         path: ~/ffmpeg
-        key: ffmpeg-7.0-${{ runner.os }}
+        key: ffmpeg-7.0-prebuilt-${{ runner.os }}-v2
 
-    - name: Install build dependencies
+    - name: Install FFmpeg dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y \
-          build-essential \
-          pkg-config \
-          yasm \
-          nasm \
-          libopus-dev \
-          libopusfile-dev \
-          libx264-dev \
-          libx265-dev \
-          libvpx-dev \
-          libmp3lame-dev
+        sudo apt-get install -y pkg-config
 
-    - name: Build and install FFmpeg from source
+    - name: Download prebuilt FFmpeg
       if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
       run: |
         cd ~
-        wget -q https://ffmpeg.org/releases/ffmpeg-7.0.tar.xz
-        tar xf ffmpeg-7.0.tar.xz
-        cd ffmpeg-7.0
-        ./configure \
-          --prefix=$HOME/ffmpeg \
-          --enable-gpl \
-          --enable-version3 \
-          --enable-libopus \
-          --enable-libx264 \
-          --enable-libx265 \
-          --enable-libvpx \
-          --enable-libmp3lame \
-          --enable-shared \
-          --disable-static \
-          --enable-pic \
-          --enable-avfilter \
-          --enable-avdevice \
-          --enable-swscale \
-          --enable-postproc
-        make -j$(nproc)
-        make install
+        # Download FFmpeg 7.0 shared build from BtbN
+        wget -q https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2024-07-31-12-50/ffmpeg-n7.0.1-linux64-gpl-shared-7.0.tar.xz
+        tar xf ffmpeg-n7.0.1-linux64-gpl-shared-7.0.tar.xz
+        mv ffmpeg-n7.0.1-linux64-gpl-shared-7.0 ffmpeg
 
     - name: Set FFmpeg environment variables
       run: |
@@ -190,16 +135,8 @@ jobs:
 
     - name: Verify FFmpeg installation
       run: |
-        export PKG_CONFIG_PATH=$HOME/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH
-        export LD_LIBRARY_PATH=$HOME/ffmpeg/lib:$LD_LIBRARY_PATH
         echo "FFmpeg version:"
         $HOME/ffmpeg/bin/ffmpeg -version
-        echo ""
-        echo "pkg-config --modversion output:"
-        pkg-config --modversion libavcodec libavdevice libavfilter libavformat libswresample libswscale libavutil
-        echo ""
-        echo "pkg-config --cflags output:"
-        pkg-config --cflags libavcodec libavdevice libavfilter libavformat libswresample libswscale libavutil
 
     - name: Download Go modules
       run: go mod download
