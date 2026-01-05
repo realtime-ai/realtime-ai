@@ -242,6 +242,9 @@ func (s *Session) HandleClientEvent(event events.ClientEvent) error {
 	case *events.ResponseCancelEvent:
 		return s.handleResponseCancel(e)
 
+	case *events.ResponseInterruptEvent:
+		return s.handleResponseInterrupt(e)
+
 	default:
 		return s.SendEvent(events.NewErrorEvent(
 			events.ErrorTypeInvalidRequest,
@@ -711,5 +714,53 @@ func (s *Session) handleResponseCancel(_ *events.ResponseCancelEvent) error {
 	// For now, we just acknowledge
 	// The actual implementation would need to track the current response
 	// and send appropriate events
+	return nil
+}
+
+// handleResponseInterrupt handles the response.interrupt client event.
+// This triggers an immediate interrupt of the current AI response.
+func (s *Session) handleResponseInterrupt(e *events.ResponseInterruptEvent) error {
+	p := s.GetPipeline()
+	if p == nil {
+		return s.SendEvent(events.NewErrorEvent(
+			events.ErrorTypeInvalidRequest,
+			"no_pipeline",
+			"No pipeline configured for this session",
+			"",
+		))
+	}
+
+	// Get the interrupt manager from the pipeline
+	im := p.GetInterruptManager()
+	if im == nil {
+		// If no interrupt manager, publish interrupt event directly to bus
+		log.Printf("[session %s] No interrupt manager, publishing EventInterrupted directly", s.ID)
+
+		reason := e.Reason
+		if reason == "" {
+			reason = "client_request"
+		}
+
+		p.Bus().Publish(pipeline.Event{
+			Type:      pipeline.EventInterrupted,
+			Timestamp: time.Now(),
+			Payload: &pipeline.InterruptPayload{
+				Source:        pipeline.InterruptSourceClient,
+				InterruptedAt: time.Now().UnixMilli(),
+				Reason:        reason,
+			},
+		})
+
+		return nil
+	}
+
+	// Trigger manual interrupt through the interrupt manager
+	reason := e.Reason
+	if reason == "" {
+		reason = "client_request"
+	}
+	log.Printf("[session %s] Triggering manual interrupt, reason: %s", s.ID, reason)
+	im.TriggerManualInterruptWithReason(reason)
+
 	return nil
 }

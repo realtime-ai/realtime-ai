@@ -18,6 +18,7 @@ const (
 	ClientEventTypeConversationItemDelete   ClientEventType = "conversation.item.delete"
 	ClientEventTypeResponseCreate           ClientEventType = "response.create"
 	ClientEventTypeResponseCancel           ClientEventType = "response.cancel"
+	ClientEventTypeResponseInterrupt        ClientEventType = "response.interrupt" // Custom: interrupt current response
 )
 
 // ClientEvent is the interface for all client events.
@@ -94,6 +95,15 @@ type ResponseCancelEvent struct {
 	BaseClientEvent
 }
 
+// ResponseInterruptEvent interrupts the current response immediately.
+// This is a custom extension for business-layer interrupt control.
+// Unlike response.cancel which may wait for a natural breakpoint,
+// response.interrupt stops output immediately.
+type ResponseInterruptEvent struct {
+	BaseClientEvent
+	Reason string `json:"reason,omitempty"` // Optional reason for interrupt
+}
+
 // ParseClientEvent parses a JSON message into a ClientEvent.
 func ParseClientEvent(data []byte) (ClientEvent, error) {
 	var base BaseClientEvent
@@ -147,6 +157,11 @@ func ParseClientEvent(data []byte) (ClientEvent, error) {
 
 	case ClientEventTypeResponseCancel:
 		var e ResponseCancelEvent
+		err = json.Unmarshal(data, &e)
+		event = &e
+
+	case ClientEventTypeResponseInterrupt:
+		var e ResponseInterruptEvent
 		err = json.Unmarshal(data, &e)
 		event = &e
 

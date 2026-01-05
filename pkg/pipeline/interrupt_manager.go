@@ -357,31 +357,7 @@ func (im *InterruptManager) shouldInterrupt(source InterruptSource) bool {
 
 // triggerInterruptLocked 触发打断（必须持有锁）
 func (im *InterruptManager) triggerInterruptLocked(source InterruptSource, payload interface{}) {
-	log.Printf("[InterruptManager] Triggering interrupt from source: %v", source)
-
-	im.state = InterruptStateInterrupted
-	im.lastInterruptAt = time.Now()
-	im.pendingInterrupt = false
-
-	// 构建打断载荷
-	interruptPayload := &InterruptPayload{
-		Source:        source,
-		ResponseID:    im.currentResponseID,
-		InterruptedAt: time.Now().UnixMilli(),
-		Reason:        "user_speech_detected",
-	}
-
-	// 如果原始载荷有音频时间信息，提取
-	if vadPayload, ok := payload.(*VADPayload); ok {
-		interruptPayload.AudioMs = vadPayload.AudioMs
-	}
-
-	// 广播打断事件
-	im.bus.Publish(Event{
-		Type:      EventInterrupted,
-		Timestamp: time.Now(),
-		Payload:   interruptPayload,
-	})
+	im.triggerInterruptLockedWithReason(source, payload, "user_speech_detected")
 }
 
 // confirmInterruptLocked 确认打断（混合模式使用，必须持有锁）
@@ -408,6 +384,11 @@ func (im *InterruptManager) resumeAudioOutput() {
 
 // TriggerManualInterrupt 手动触发打断（供外部调用）
 func (im *InterruptManager) TriggerManualInterrupt() {
+	im.TriggerManualInterruptWithReason("client_request")
+}
+
+// TriggerManualInterruptWithReason 手动触发打断，支持自定义原因
+func (im *InterruptManager) TriggerManualInterruptWithReason(reason string) {
 	im.mu.Lock()
 	defer im.mu.Unlock()
 
@@ -416,7 +397,37 @@ func (im *InterruptManager) TriggerManualInterrupt() {
 		return
 	}
 
-	im.triggerInterruptLocked(InterruptSourceClient, nil)
+	log.Printf("[InterruptManager] Manual interrupt triggered, reason: %s", reason)
+	im.triggerInterruptLockedWithReason(InterruptSourceClient, nil, reason)
+}
+
+// triggerInterruptLockedWithReason 触发打断，支持自定义原因（必须持有锁）
+func (im *InterruptManager) triggerInterruptLockedWithReason(source InterruptSource, payload interface{}, reason string) {
+	log.Printf("[InterruptManager] Triggering interrupt from source: %v, reason: %s", source, reason)
+
+	im.state = InterruptStateInterrupted
+	im.lastInterruptAt = time.Now()
+	im.pendingInterrupt = false
+
+	// 构建打断载荷
+	interruptPayload := &InterruptPayload{
+		Source:        source,
+		ResponseID:    im.currentResponseID,
+		InterruptedAt: time.Now().UnixMilli(),
+		Reason:        reason,
+	}
+
+	// 如果原始载荷有音频时间信息，提取
+	if vadPayload, ok := payload.(*VADPayload); ok {
+		interruptPayload.AudioMs = vadPayload.AudioMs
+	}
+
+	// 广播打断事件
+	im.bus.Publish(Event{
+		Type:      EventInterrupted,
+		Timestamp: time.Now(),
+		Payload:   interruptPayload,
+	})
 }
 
 // GetState 获取当前状态

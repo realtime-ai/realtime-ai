@@ -180,7 +180,25 @@ type InterruptPayload struct {
 }
 ```
 
-### 5.3 客户端事件
+### 5.3 客户端发送的打断事件
+
+客户端可以主动发送 `response.interrupt` 事件来触发打断：
+
+```json
+{
+  "type": "response.interrupt",
+  "event_id": "evt_client_001",
+  "reason": "user_clicked_stop"
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `type` | string | 固定为 `response.interrupt` |
+| `event_id` | string | 可选，客户端生成的事件 ID |
+| `reason` | string | 可选，打断原因（如 `user_clicked_stop`、`timeout` 等） |
+
+### 5.4 服务端返回的打断事件
 
 打断发生时客户端收到的事件序列：
 
@@ -265,7 +283,7 @@ p.AddElements([]pipeline.Element{
 p.Start(ctx)
 ```
 
-### 7.2 手动触发打断
+### 7.2 服务端手动触发打断
 
 ```go
 // 获取打断管理器
@@ -273,9 +291,29 @@ im := p.GetInterruptManager()
 
 // 手动触发打断（例如用户点击按钮）
 im.TriggerManualInterrupt()
+
+// 带自定义原因的打断
+im.TriggerManualInterruptWithReason("timeout")
 ```
 
-### 7.3 监听打断事件
+### 7.3 客户端信令打断
+
+客户端可以通过 WebSocket/DataChannel 发送信令来打断：
+
+```javascript
+// JavaScript 客户端示例
+const interruptEvent = {
+  type: "response.interrupt",
+  event_id: "evt_" + Date.now(),
+  reason: "user_clicked_stop"
+};
+
+websocket.send(JSON.stringify(interruptEvent));
+```
+
+服务端收到后会立即触发打断流程，客户端会收到 `response.interrupted` 事件。
+
+### 7.4 监听打断事件
 
 ```go
 // 订阅打断确认事件
