@@ -16,8 +16,6 @@
 //	    ModelPath:  "path/to/silero_vad.onnx",
 //	    SampleRate: 16000,
 //	})
-//
-//go:build vad
 
 package vad
 
