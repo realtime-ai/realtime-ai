@@ -27,6 +27,11 @@ const (
 	EventResponseEnd   EventType = "ResponseEnd"   // AI completes response generation
 	EventAudioDelta    EventType = "AudioDelta"    // Audio chunk from AI
 	EventTextDelta     EventType = "TextDelta"     // Text chunk from AI
+
+	// Interrupt related events
+	EventInterruptAcknowledged EventType = "InterruptAcknowledged" // Component acknowledges interrupt
+	EventAudioPause            EventType = "AudioPause"            // Pause audio output (hybrid mode)
+	EventAudioResume           EventType = "AudioResume"           // Resume audio output (hybrid mode)
 )
 
 // Event 代表一条通用事件
@@ -71,6 +76,24 @@ type VADPayload struct {
 	PreRollAudio []byte  // Pre-roll audio data before speech start (only for VADSpeechStart)
 	SampleRate   int     // Sample rate of PreRollAudio
 	Channels     int     // Number of channels in PreRollAudio
+}
+
+// InterruptSource defines the source of interrupt signal
+type InterruptSource int
+
+const (
+	InterruptSourceVAD    InterruptSource = iota // Local VAD detection
+	InterruptSourceLLMAPI                        // LLM API signal
+	InterruptSourceClient                        // Client manual interrupt
+)
+
+// InterruptPayload is the payload for interrupt events
+type InterruptPayload struct {
+	Source        InterruptSource // Source of the interrupt
+	ResponseID    string          // ID of the interrupted response
+	InterruptedAt int64           // Unix timestamp in milliseconds
+	AudioMs       int             // Audio played before interrupt (milliseconds)
+	Reason        string          // Reason for interrupt
 }
 
 // Bus 定义了事件总线的接口

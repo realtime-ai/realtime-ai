@@ -18,6 +18,7 @@ const (
 	ClientEventTypeConversationItemDelete   ClientEventType = "conversation.item.delete"
 	ClientEventTypeResponseCreate           ClientEventType = "response.create"
 	ClientEventTypeResponseCancel           ClientEventType = "response.cancel"
+	ClientEventTypeResponseInterrupt        ClientEventType = "response.interrupt" // Custom: interrupt current response
 )
 
 // ClientEvent is the interface for all client events.
@@ -89,10 +90,18 @@ type ResponseCreateEvent struct {
 	Response *ResponseConfig `json:"response,omitempty"`
 }
 
-// ResponseCancelEvent cancels the current response.
+// ResponseCancelEvent cancels/interrupts the current response.
+// This immediately stops AI output and is compatible with OpenAI Realtime API.
+// Both "response.cancel" and "response.interrupt" event types are handled by this struct.
 type ResponseCancelEvent struct {
 	BaseClientEvent
+	Reason string `json:"reason,omitempty"` // Optional reason for cancel/interrupt
 }
+
+// ResponseInterruptEvent is an alias for ResponseCancelEvent for backward compatibility.
+// Both event types ("response.cancel" and "response.interrupt") trigger the same behavior.
+// Recommended: Use ResponseCancelEvent / "response.cancel" for OpenAI API compatibility.
+type ResponseInterruptEvent = ResponseCancelEvent
 
 // ParseClientEvent parses a JSON message into a ClientEvent.
 func ParseClientEvent(data []byte) (ClientEvent, error) {
@@ -147,6 +156,11 @@ func ParseClientEvent(data []byte) (ClientEvent, error) {
 
 	case ClientEventTypeResponseCancel:
 		var e ResponseCancelEvent
+		err = json.Unmarshal(data, &e)
+		event = &e
+
+	case ClientEventTypeResponseInterrupt:
+		var e ResponseInterruptEvent
 		err = json.Unmarshal(data, &e)
 		event = &e
 

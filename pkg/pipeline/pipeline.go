@@ -72,9 +72,10 @@ func (p *PipelineMessage) String() string {
 
 type Pipeline struct {
 	sync.Mutex
-	name     string
-	bus      Bus
-	elements []Element
+	name             string
+	bus              Bus
+	elements         []Element
+	interruptManager *InterruptManager // 可选的打断管理器
 }
 
 func NewPipeline(name string) *Pipeline {
@@ -100,6 +101,27 @@ func (p *Pipeline) AddElements(elements []Element) {
 		element.SetBus(p.bus)
 	}
 	p.elements = append(p.elements, elements...)
+}
+
+// EnableInterruptManager 启用打断管理器
+// 打断管理器会监听 VAD、LLM API 等事件，统一管理打断逻辑
+func (p *Pipeline) EnableInterruptManager(config InterruptConfig) *InterruptManager {
+	p.Lock()
+	defer p.Unlock()
+
+	if p.interruptManager != nil {
+		return p.interruptManager
+	}
+
+	p.interruptManager = NewInterruptManager(p.bus, config)
+	return p.interruptManager
+}
+
+// GetInterruptManager 获取打断管理器（如果已启用）
+func (p *Pipeline) GetInterruptManager() *InterruptManager {
+	p.Lock()
+	defer p.Unlock()
+	return p.interruptManager
 }
 
 // Link 连接两个 Element，返回一个取消函数用于断开连接
@@ -161,24 +183,44 @@ func (p *Pipeline) Pull() *PipelineMessage {
 }
 
 func (p *Pipeline) Start(ctx context.Context) error {
+	// 启动事件总线
+	p.bus.Start(ctx)
+
+	// 启动打断管理器（如果已启用）
+	if p.interruptManager != nil {
+		if err := p.interruptManager.Start(ctx); err != nil {
+			return err
+		}
+	}
+
+	// 启动所有 Elements
 	for _, e := range p.elements {
 		if err := e.Start(ctx); err != nil {
 			return err
 		}
 	}
-	p.bus.Start(ctx)
+
 	return nil
 }
 
 func (p *Pipeline) Stop() error {
 	p.Lock()
 	defer p.Unlock()
-	// 倒序停止更稳妥，也可以正序
+
+	// 倒序停止 Elements
 	for i := len(p.elements) - 1; i >= 0; i-- {
 		if err := p.elements[i].Stop(); err != nil {
 			return err
 		}
 	}
+
+	// 停止打断管理器
+	if p.interruptManager != nil {
+		if err := p.interruptManager.Stop(); err != nil {
+			return err
+		}
+	}
+
 	// 停止事件总线
 	p.bus.Stop()
 	return nil

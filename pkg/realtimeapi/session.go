@@ -240,6 +240,8 @@ func (s *Session) HandleClientEvent(event events.ClientEvent) error {
 		return s.handleResponseCreate(e)
 
 	case *events.ResponseCancelEvent:
+		// ResponseInterruptEvent is an alias for ResponseCancelEvent,
+		// so both event types are handled here
 		return s.handleResponseCancel(e)
 
 	default:
@@ -702,14 +704,46 @@ func (s *Session) handleResponseCreate(_ *events.ResponseCreateEvent) error {
 	return nil
 }
 
-func (s *Session) handleResponseCancel(_ *events.ResponseCancelEvent) error {
-	// Cancel the current response generation
-	// This would typically involve:
-	// 1. Canceling any ongoing AI generation
-	// 2. Sending a response.done event with cancelled status
+func (s *Session) handleResponseCancel(e *events.ResponseCancelEvent) error {
+	// Cancel/interrupt the current response generation
+	// This handles both response.cancel and response.interrupt events
+	// (ResponseInterruptEvent is an alias for ResponseCancelEvent)
 
-	// For now, we just acknowledge
-	// The actual implementation would need to track the current response
-	// and send appropriate events
+	p := s.GetPipeline()
+	if p == nil {
+		// No pipeline, just acknowledge - nothing to cancel
+		return nil
+	}
+
+	// Determine the reason for cancellation
+	reason := e.Reason
+	if reason == "" {
+		reason = "client_request"
+	}
+
+	// Get the interrupt manager from the pipeline
+	im := p.GetInterruptManager()
+	if im == nil {
+		// If no interrupt manager, publish interrupt event directly to bus
+		log.Printf("[session %s] No interrupt manager, publishing EventInterrupted directly", s.ID)
+
+		p.Bus().Publish(pipeline.Event{
+			Type:      pipeline.EventInterrupted,
+			Timestamp: time.Now(),
+			Payload: &pipeline.InterruptPayload{
+				Source:        pipeline.InterruptSourceClient,
+				InterruptedAt: time.Now().UnixMilli(),
+				Reason:        reason,
+			},
+		})
+
+		return nil
+	}
+
+	// Trigger manual interrupt through the interrupt manager
+	log.Printf("[session %s] Triggering interrupt via response.cancel, reason: %s", s.ID, reason)
+	im.TriggerManualInterruptWithReason(reason)
+
 	return nil
 }
+

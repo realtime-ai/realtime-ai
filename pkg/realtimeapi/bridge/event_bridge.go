@@ -193,21 +193,57 @@ func (eb *EventBridge) handleVADSpeechEnd(evt pipeline.Event) {
 
 // handleInterrupted handles interruption events.
 func (eb *EventBridge) handleInterrupted(evt pipeline.Event) {
-	// If there's an active response, complete it with cancelled status
-	if eb.tracker.HasActiveResponse() {
-		eb.completeCurrentResponse(events.ResponseStatusCancelled)
-	}
+	log.Printf("[EventBridge] Handling interrupt event")
 
-	// Also treat interruption as speech start
-	itemID := "item_" + uuid.New().String()[:8]
-	audioMs := 0
-	if payload, ok := evt.Payload.(*pipeline.VADPayload); ok {
+	// Extract interrupt information
+	var audioMs int
+	var itemID string
+	var reason string
+	var responseID string
+
+	// Try to get InterruptPayload first (from InterruptManager)
+	if payload, ok := evt.Payload.(*pipeline.InterruptPayload); ok {
+		audioMs = payload.AudioMs
+		reason = payload.Reason
+		responseID = payload.ResponseID
+		if responseID != "" {
+			log.Printf("[EventBridge] Interrupt for response: %s, reason: %s", responseID, reason)
+		}
+	} else if payload, ok := evt.Payload.(*pipeline.VADPayload); ok {
+		// Fallback to VADPayload (legacy)
 		audioMs = payload.AudioMs
 		if payload.ItemID != "" {
 			itemID = payload.ItemID
 		}
+		reason = "user_speech_detected"
 	}
+
+	// If there's an active response, send interrupted event and complete it
+	if eb.tracker.HasActiveResponse() {
+		ctx, err := eb.tracker.GetCurrentResponse()
+		if err == nil {
+			// Send response.interrupted event (custom extension)
+			eb.sender.SendEvent(events.NewResponseInterruptedEvent(
+				ctx.ResponseID,
+				ctx.ItemID,
+				audioMs,
+				reason,
+			))
+		}
+
+		log.Printf("[EventBridge] Completing active response due to interrupt")
+		eb.completeCurrentResponse(events.ResponseStatusCancelled)
+	}
+
+	// Generate item ID if not provided
+	if itemID == "" {
+		itemID = "item_" + uuid.New().String()[:8]
+	}
+
+	// Send speech started event to indicate user is now speaking
 	eb.sender.SendEvent(events.NewInputAudioBufferSpeechStartedEvent(audioMs, itemID))
+
+	log.Printf("[EventBridge] Interrupt handled, new input item: %s, reason: %s", itemID, reason)
 }
 
 // handleResponseStart handles response start events.

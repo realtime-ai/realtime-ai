@@ -32,10 +32,17 @@ func DefaultAudioPacerConfig() AudioPacerConfig {
 
 // AudioPacer 控制音频输出节奏，实现固定20ms间隔的音频帧输出
 // 只做缓冲和帧切分，不做重采样
+//
+// 主要功能:
+//   - 固定 20ms 帧输出
+//   - 缓冲积累控制 (避免初始抖动)
+//   - 打断时快速清空和淡出
+//   - 暂停/恢复支持 (用于混合模式打断)
 type AudioPacer struct {
 	buffer       []byte
 	mu           sync.Mutex
 	accumulating bool // 是否正在积累数据
+	paused       bool // 是否暂停输出
 
 	// 配置
 	sampleRate    int
@@ -91,6 +98,11 @@ func (ap *AudioPacer) ReadFrame() []byte {
 	// 准备输出缓冲区
 	frame := make([]byte, ap.bytesPerFrame)
 
+	// 如果暂停中，返回静音
+	if ap.paused {
+		return frame
+	}
+
 	// 如果正在积累数据且缓冲区小于200ms，返回静音
 	if ap.accumulating && len(ap.buffer) < ap.bytesPerFrame*10 { // 10帧 = 200ms
 		return frame
@@ -122,9 +134,80 @@ func (ap *AudioPacer) ReadFrame() []byte {
 func (ap *AudioPacer) Clear() {
 	ap.mu.Lock()
 	defer ap.mu.Unlock()
-	log.Printf("clear buffer: %d, starting accumulation", len(ap.buffer))
+	log.Printf("clear buffer: %d bytes, starting accumulation", len(ap.buffer))
 	ap.buffer = ap.buffer[:0]
 	ap.accumulating = true
+	ap.paused = false
+}
+
+// ClearWithFadeOut 清空缓冲区，对剩余音频应用淡出效果
+// fadeOutMs: 淡出时长（毫秒），0 表示不淡出直接清空
+func (ap *AudioPacer) ClearWithFadeOut(fadeOutMs int) {
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+
+	if fadeOutMs > 0 && len(ap.buffer) > 0 {
+		// 计算淡出需要的字节数
+		fadeOutBytes := ap.sampleRate * fadeOutMs / 1000 * BytesPerSample * ap.channels
+		if fadeOutBytes > len(ap.buffer) {
+			fadeOutBytes = len(ap.buffer)
+		}
+
+		// 应用淡出效果 (16-bit PCM)
+		samples := fadeOutBytes / BytesPerSample
+		for i := 0; i < samples; i++ {
+			// 线性淡出因子: 1.0 -> 0.0
+			factor := float32(samples-i) / float32(samples)
+
+			// 读取 16-bit 样本 (little-endian)
+			idx := i * BytesPerSample
+			sample := int16(ap.buffer[idx]) | int16(ap.buffer[idx+1])<<8
+
+			// 应用淡出
+			sample = int16(float32(sample) * factor)
+
+			// 写回
+			ap.buffer[idx] = byte(sample)
+			ap.buffer[idx+1] = byte(sample >> 8)
+		}
+
+		// 只保留淡出部分，其余清空
+		ap.buffer = ap.buffer[:fadeOutBytes]
+		log.Printf("applied fade-out to %d bytes, discarded rest", fadeOutBytes)
+	} else {
+		ap.buffer = ap.buffer[:0]
+		log.Printf("clear buffer immediately (no fade-out)")
+	}
+
+	ap.accumulating = true
+	ap.paused = false
+}
+
+// Pause 暂停音频输出，ReadFrame 将返回静音
+func (ap *AudioPacer) Pause() {
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+	if !ap.paused {
+		ap.paused = true
+		log.Printf("audio pacer paused, buffer: %d bytes", len(ap.buffer))
+	}
+}
+
+// Resume 恢复音频输出
+func (ap *AudioPacer) Resume() {
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+	if ap.paused {
+		ap.paused = false
+		log.Printf("audio pacer resumed, buffer: %d bytes", len(ap.buffer))
+	}
+}
+
+// IsPaused 返回当前是否暂停
+func (ap *AudioPacer) IsPaused() bool {
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+	return ap.paused
 }
 
 // Available 返回当前可用的音频数据长度（字节）
