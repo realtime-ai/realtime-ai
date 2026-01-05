@@ -182,11 +182,11 @@ type InterruptPayload struct {
 
 ### 5.3 客户端发送的打断事件
 
-客户端可以主动发送 `response.interrupt` 事件来触发打断：
+客户端可以发送 `response.cancel` 事件来触发打断（`response.interrupt` 作为别名也被支持，两者功能完全相同）：
 
 ```json
 {
-  "type": "response.interrupt",
+  "type": "response.cancel",
   "event_id": "evt_client_001",
   "reason": "user_clicked_stop"
 }
@@ -194,9 +194,11 @@ type InterruptPayload struct {
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `type` | string | 固定为 `response.interrupt` |
+| `type` | string | `response.cancel` 或 `response.interrupt`（两者等价） |
 | `event_id` | string | 可选，客户端生成的事件 ID |
 | `reason` | string | 可选，打断原因（如 `user_clicked_stop`、`timeout` 等） |
+
+> **注意**: `response.cancel` 是 OpenAI Realtime API 的标准事件。`response.interrupt` 作为别名保留以保持向后兼容性。推荐使用 `response.cancel`。
 
 ### 5.4 服务端返回的打断事件
 
@@ -302,13 +304,15 @@ im.TriggerManualInterruptWithReason("timeout")
 
 ```javascript
 // JavaScript 客户端示例
-const interruptEvent = {
-  type: "response.interrupt",
+const cancelEvent = {
+  type: "response.cancel",  // 推荐使用 response.cancel（OpenAI 标准）
   event_id: "evt_" + Date.now(),
   reason: "user_clicked_stop"
 };
 
-websocket.send(JSON.stringify(interruptEvent));
+websocket.send(JSON.stringify(cancelEvent));
+
+// 注意: "response.interrupt" 也可用（作为别名保留）
 ```
 
 服务端收到后会立即触发打断流程，客户端会收到 `response.interrupted` 事件。

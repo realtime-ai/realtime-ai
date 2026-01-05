@@ -90,19 +90,18 @@ type ResponseCreateEvent struct {
 	Response *ResponseConfig `json:"response,omitempty"`
 }
 
-// ResponseCancelEvent cancels the current response.
+// ResponseCancelEvent cancels/interrupts the current response.
+// This immediately stops AI output and is compatible with OpenAI Realtime API.
+// Both "response.cancel" and "response.interrupt" event types are handled by this struct.
 type ResponseCancelEvent struct {
 	BaseClientEvent
+	Reason string `json:"reason,omitempty"` // Optional reason for cancel/interrupt
 }
 
-// ResponseInterruptEvent interrupts the current response immediately.
-// This is a custom extension for business-layer interrupt control.
-// Unlike response.cancel which may wait for a natural breakpoint,
-// response.interrupt stops output immediately.
-type ResponseInterruptEvent struct {
-	BaseClientEvent
-	Reason string `json:"reason,omitempty"` // Optional reason for interrupt
-}
+// ResponseInterruptEvent is an alias for ResponseCancelEvent for backward compatibility.
+// Both event types ("response.cancel" and "response.interrupt") trigger the same behavior.
+// Recommended: Use ResponseCancelEvent / "response.cancel" for OpenAI API compatibility.
+type ResponseInterruptEvent = ResponseCancelEvent
 
 // ParseClientEvent parses a JSON message into a ClientEvent.
 func ParseClientEvent(data []byte) (ClientEvent, error) {
