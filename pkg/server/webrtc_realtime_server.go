@@ -425,6 +425,25 @@ func (h *webrtcRealtimeEventHandler) OnAudioReceived(data []byte, sampleRate, ch
 	h.session.PushAudio(data, sampleRate, channels)
 }
 
+func (h *webrtcRealtimeEventHandler) OnImageReceived(data []byte, mimeType string, width, height int, timestamp time.Time) {
+	// Push image to session's pipeline
+	if p := h.session.GetPipeline(); p != nil {
+		p.Push(&pipeline.PipelineMessage{
+			Type:      pipeline.MsgTypeImage,
+			SessionID: h.session.ID,
+			Timestamp: timestamp,
+			ImageData: &pipeline.ImageData{
+				Data:      data,
+				MIMEType:  mimeType,
+				Width:     width,
+				Height:    height,
+				Timestamp: timestamp,
+			},
+		})
+		log.Printf("[WebRTCRealtimeServer] session %s pushed image to pipeline: %s, %d bytes", h.session.ID, mimeType, len(data))
+	}
+}
+
 func (h *webrtcRealtimeEventHandler) OnClientEvent(event events.ClientEvent) {
 	// Handle Realtime API events
 	if err := h.session.HandleClientEvent(event); err != nil {

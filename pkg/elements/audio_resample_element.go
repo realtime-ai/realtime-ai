@@ -68,7 +68,13 @@ func (e *AudioResampleElement) Start(ctx context.Context) error {
 			case <-ctx.Done():
 				return
 			case msg := <-e.BaseElement.InChan:
+				// 非音频消息直接透传
 				if msg.Type != pipeline.MsgTypeAudio {
+					select {
+					case e.BaseElement.OutChan <- msg:
+					case <-ctx.Done():
+						return
+					}
 					continue
 				}
 

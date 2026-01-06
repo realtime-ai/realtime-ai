@@ -2,6 +2,8 @@ package connection
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"io"
 	"log"
 	"sync"
@@ -167,8 +169,58 @@ func (c *webrtcConnection) start() {
 	})
 }
 
+// dataChannelImagePayload 定义 DataChannel 中图像消息的 JSON 格式
+type dataChannelImagePayload struct {
+	Type     string `json:"type"`      // "image"
+	Data     string `json:"data"`      // Base64 编码的图像数据
+	MIMEType string `json:"mime_type"` // image/jpeg, image/png, image/webp
+	Width    int    `json:"width,omitempty"`
+	Height   int    `json:"height,omitempty"`
+}
+
 func (c *webrtcConnection) setupDataChannel(dc *webrtc.DataChannel) {
 	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
+		// 尝试解析为 JSON，检查是否为图像消息
+		var payload map[string]interface{}
+		if err := json.Unmarshal(msg.Data, &payload); err == nil {
+			if payloadType, ok := payload["type"].(string); ok && payloadType == "image" {
+				// 解析图像消息
+				var imgPayload dataChannelImagePayload
+				if err := json.Unmarshal(msg.Data, &imgPayload); err != nil {
+					log.Printf("[webrtc %s] failed to parse image payload: %v", c.peerID, err)
+					return
+				}
+
+				// Base64 解码图像数据
+				imageData, err := base64.StdEncoding.DecodeString(imgPayload.Data)
+				if err != nil {
+					log.Printf("[webrtc %s] failed to decode image data: %v", c.peerID, err)
+					return
+				}
+
+				log.Printf("[webrtc %s] received image: %s, %d bytes", c.peerID, imgPayload.MIMEType, len(imageData))
+
+				pipelineMsg := &pipeline.PipelineMessage{
+					Type: pipeline.MsgTypeImage,
+					ImageData: &pipeline.ImageData{
+						Data:      imageData,
+						MIMEType:  imgPayload.MIMEType,
+						Width:     imgPayload.Width,
+						Height:    imgPayload.Height,
+						Timestamp: time.Now(),
+					},
+				}
+
+				c.mu.RLock()
+				handler := c.handler
+				c.mu.RUnlock()
+
+				handler.OnMessage(pipelineMsg)
+				return
+			}
+		}
+
+		// 默认作为文本消息处理
 		pipelineMsg := &pipeline.PipelineMessage{
 			Type: pipeline.MsgTypeData,
 			TextData: &pipeline.TextData{
