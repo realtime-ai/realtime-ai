@@ -44,7 +44,7 @@ brew install opus ffmpeg go
 eval "$(./scripts/setup-ffmpeg.sh --env)"
 
 # 安装其他依赖
-apt-get install pkg-config libopus-dev
+apt-get install pkg-config libopus-dev libopusfile-dev
 ```
 
 **Ubuntu/Debian (手动安装):**

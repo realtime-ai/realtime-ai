@@ -13,7 +13,7 @@ set -e
 
 FFMPEG_VERSION="7.0.1"
 FFMPEG_DIR="${FFMPEG_DIR:-$HOME/ffmpeg}"
-FFMPEG_URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2024-07-31-12-50/ffmpeg-n7.0.1-linux64-gpl-shared-7.0.tar.xz"
+FFMPEG_URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2024-07-31-12-50/ffmpeg-n7.0.1-221-g0ab20b5788-linux64-gpl-shared-7.0.tar.xz"
 FFMPEG_MACOS_URL="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2024-07-31-12-50/ffmpeg-n7.0.1-macos64-gpl-shared-7.0.tar.xz"
 
 print_env() {
@@ -92,7 +92,7 @@ install_linux() {
     wget -q --show-progress "$FFMPEG_URL" -O ffmpeg.tar.xz
     echo "Extracting..."
     tar xf ffmpeg.tar.xz
-    mv ffmpeg-n${FFMPEG_VERSION}-linux64-gpl-shared-7.0 "$FFMPEG_DIR"
+    mv ffmpeg-n7.0.1-221-g0ab20b5788-linux64-gpl-shared-7.0 "$FFMPEG_DIR"
     cd -
     rm -rf "$TMPDIR"
 
