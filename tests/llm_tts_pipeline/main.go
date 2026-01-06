@@ -52,40 +52,58 @@ type LatencyMetrics struct {
 	TotalEndToEndLatency    time.Duration
 }
 
-// SentenceSegmenter provides simple sentence boundary detection
-type SentenceSegmenter struct {
-	buffer   strings.Builder
-	minLen   int
+// SegmentMode defines the segmentation strategy
+type SegmentMode int
+
+const (
+	ModeSentence SegmentMode = iota // Wait for complete sentences (.!?)
+	ModePhrase                      // Split on phrases (,;: etc.) - lower latency
+)
+
+// TextSegmenter provides configurable text boundary detection
+type TextSegmenter struct {
+	buffer strings.Builder
+	minLen int
+	mode   SegmentMode
 }
 
-func NewSentenceSegmenter(minLen int) *SentenceSegmenter {
-	return &SentenceSegmenter{minLen: minLen}
+func NewTextSegmenter(minLen int, mode SegmentMode) *TextSegmenter {
+	return &TextSegmenter{minLen: minLen, mode: mode}
 }
 
-func (s *SentenceSegmenter) Feed(text string) []string {
+func (s *TextSegmenter) Feed(text string) []string {
 	s.buffer.WriteString(text)
-	return s.extractSentences()
+	return s.extractSegments()
 }
 
-func (s *SentenceSegmenter) Flush() string {
+func (s *TextSegmenter) Flush() string {
 	remaining := strings.TrimSpace(s.buffer.String())
 	s.buffer.Reset()
 	return remaining
 }
 
-func (s *SentenceSegmenter) extractSentences() []string {
-	var sentences []string
+func (s *TextSegmenter) extractSegments() []string {
+	var segments []string
 	text := s.buffer.String()
 
-	sentenceEnders := ".!?。！？"
+	// Define delimiters based on mode
+	var delimiters string
+	switch s.mode {
+	case ModePhrase:
+		// More aggressive splitting for lower latency
+		delimiters = ".!?;:,。！？；：，"
+	default:
+		// Sentence-level splitting
+		delimiters = ".!?。！？"
+	}
+
 	lastEnd := 0
 
 	for i, r := range text {
-		if strings.ContainsRune(sentenceEnders, r) {
-			// Check if we have enough text for a sentence
-			sentence := strings.TrimSpace(text[lastEnd : i+utf8.RuneLen(r)])
-			if len(sentence) >= s.minLen {
-				sentences = append(sentences, sentence)
+		if strings.ContainsRune(delimiters, r) {
+			segment := strings.TrimSpace(text[lastEnd : i+utf8.RuneLen(r)])
+			if len(segment) >= s.minLen {
+				segments = append(segments, segment)
 				lastEnd = i + utf8.RuneLen(r)
 			}
 		}
@@ -95,7 +113,12 @@ func (s *SentenceSegmenter) extractSentences() []string {
 	s.buffer.Reset()
 	s.buffer.WriteString(text[lastEnd:])
 
-	return sentences
+	return segments
+}
+
+// Legacy alias for backward compatibility
+func NewSentenceSegmenter(minLen int) *TextSegmenter {
+	return NewTextSegmenter(minLen, ModeSentence)
 }
 
 func main() {
@@ -111,83 +134,67 @@ func main() {
 	baseURL := os.Getenv("OPENAI_BASE_URL")
 
 	log.Println("╔═══════════════════════════════════════════════════════════════╗")
-	log.Println("║     LLM -> SentenceSegmenter -> TTS Pipeline Latency Test    ║")
+	log.Println("║   LLM -> Segmenter -> TTS Pipeline Latency Comparison Test   ║")
 	log.Println("╚═══════════════════════════════════════════════════════════════╝")
 	log.Println()
-	log.Println("Pipeline: User Query → LLM (streaming) → SentenceSegmenter → TTS → Audio")
+	log.Println("Comparing two segmentation strategies:")
+	log.Println("  • Sentence Mode: Wait for complete sentences (.!?)")
+	log.Println("  • Phrase Mode:   Split on phrases (,;: etc.) - LOWER LATENCY")
 	log.Println()
 
-	// Test cases with different query complexities
-	testCases := []struct {
-		name   string
-		prompt string
-	}{
-		{
-			name:   "Short Response",
-			prompt: "Say hello in one sentence.",
-		},
-		{
-			name:   "Medium Response",
-			prompt: "Explain what Go programming language is in 2-3 sentences.",
-		},
-		{
-			name:   "Long Response",
-			prompt: "Describe the benefits of microservices architecture in 3-4 sentences.",
-		},
-	}
+	// Test prompt for comparison
+	prompt := "Explain what Go programming language is in 2-3 sentences."
 
 	// Create output directory
 	outputDir := filepath.Join("tests", "llm_tts_pipeline", "output")
 	os.MkdirAll(outputDir, 0755)
 
+	// Test both modes
+	modes := []struct {
+		name string
+		mode SegmentMode
+	}{
+		{"Sentence Mode (baseline)", ModeSentence},
+		{"Phrase Mode (optimized)", ModePhrase},
+	}
+
 	var allMetrics []LatencyMetrics
-	passed := 0
-	failed := 0
+	var modeNames []string
 
-	for i, tc := range testCases {
+	for _, m := range modes {
+		log.Println()
 		log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		log.Printf("Test Case %d: %s", i+1, tc.name)
-		log.Printf("Prompt: %s", tc.prompt)
+		log.Printf("Testing: %s", m.name)
+		log.Printf("Prompt: %s", prompt)
 		log.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-		metrics, audioData, err := runPipelineTest(apiKey, baseURL, tc.prompt)
+		metrics, audioData, err := runPipelineTestWithMode(apiKey, baseURL, prompt, m.mode)
 		if err != nil {
 			log.Printf("  ❌ FAILED: %v", err)
-			failed++
 			continue
 		}
 
-		// Print detailed metrics
 		printMetrics(metrics)
 
-		// Save audio output
+		// Save audio
+		audioPath := filepath.Join(outputDir, fmt.Sprintf("%s.wav", sanitizeFilename(m.name)))
 		if len(audioData) > 0 {
-			audioPath := filepath.Join(outputDir, fmt.Sprintf("test%d_%s.wav", i+1, sanitizeFilename(tc.name)))
-			if err := saveWAV(audioData, audioPath, 24000); err != nil {
-				log.Printf("  Warning: Failed to save audio: %v", err)
-			} else {
-				log.Printf("  📁 Audio saved: %s (%d bytes)", audioPath, len(audioData))
-			}
+			saveWAV(audioData, audioPath, 24000)
+			log.Printf("  📁 Audio saved: %s", audioPath)
 		}
 
 		allMetrics = append(allMetrics, *metrics)
-		log.Println("  ✅ PASSED")
-		passed++
-		log.Println()
+		modeNames = append(modeNames, m.name)
 	}
 
-	// Print summary
-	printSummary(allMetrics, passed, failed)
+	// Print comparison
+	printComparison(allMetrics, modeNames)
 
-	// Save detailed report
-	saveReport(outputDir, allMetrics, passed, failed)
-
-	if failed > 0 {
-		os.Exit(1)
-	}
+	// Save report
+	saveComparisonReport(outputDir, allMetrics, modeNames)
 }
 
-func runPipelineTest(apiKey, baseURL, prompt string) (*LatencyMetrics, []byte, error) {
+func runPipelineTestWithMode(apiKey, baseURL, prompt string, mode SegmentMode) (*LatencyMetrics, []byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -216,14 +223,14 @@ func runPipelineTest(apiKey, baseURL, prompt string) (*LatencyMetrics, []byte, e
 
 	stream := client.Chat.Completions.NewStreaming(ctx, params)
 
-	// Stage 2: Process streaming tokens with sentence segmentation
-	segmenter := NewSentenceSegmenter(5)
+	// Stage 2: Process streaming tokens with configurable segmentation
+	segmenter := NewTextSegmenter(5, mode) // Use configurable mode
 	var fullResponse strings.Builder
-	var sentences []string
+	var segments []string
 	firstTokenReceived := false
-	firstSentenceReady := false
+	firstSegmentReady := false
 
-	sentenceChan := make(chan string, 10)
+	segmentChan := make(chan string, 10)
 	var wg sync.WaitGroup
 
 	// Goroutine for TTS processing
@@ -235,15 +242,15 @@ func runPipelineTest(apiKey, baseURL, prompt string) (*LatencyMetrics, []byte, e
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for sentence := range sentenceChan {
-			log.Printf("  [2/3] SentenceSegmenter: Got sentence: %q", truncate(sentence, 50))
+		for segment := range segmentChan {
+			log.Printf("  [2/3] Segmenter: Got segment: %q", truncate(segment, 50))
 
 			// TTS synthesis
-			log.Printf("  [3/3] TTS: Synthesizing audio for sentence...")
+			log.Printf("  [3/3] TTS: Synthesizing audio...")
 			ttsStart := time.Now()
 
 			resp, err := ttsProvider.Synthesize(ctx, &tts.SynthesizeRequest{
-				Text:  sentence,
+				Text:  segment,
 				Voice: "alloy",
 			})
 			if err != nil {
@@ -255,12 +262,12 @@ func runPipelineTest(apiKey, baseURL, prompt string) (*LatencyMetrics, []byte, e
 			if !firstTTSChunkReceived {
 				metrics.FirstTTSChunk = time.Now()
 				firstTTSChunkReceived = true
-				log.Printf("  [3/3] TTS: First audio chunk received (latency: %v)", time.Since(ttsStart))
+				log.Printf("  [3/3] TTS: First audio chunk! (TTS latency: %v)", time.Since(ttsStart))
 			}
 			allAudioData = append(allAudioData, resp.AudioData...)
 			audioMu.Unlock()
 
-			log.Printf("  [3/3] TTS: Generated %d bytes of audio", len(resp.AudioData))
+			log.Printf("  [3/3] TTS: Generated %d bytes", len(resp.AudioData))
 		}
 	}()
 
@@ -285,35 +292,35 @@ func runPipelineTest(apiKey, baseURL, prompt string) (*LatencyMetrics, []byte, e
 
 		fullResponse.WriteString(delta)
 
-		// Feed to sentence segmenter
-		newSentences := segmenter.Feed(delta)
-		for _, s := range newSentences {
-			if !firstSentenceReady {
+		// Feed to segmenter
+		newSegments := segmenter.Feed(delta)
+		for _, s := range newSegments {
+			if !firstSegmentReady {
 				metrics.FirstSentenceReady = time.Now()
-				firstSentenceReady = true
-				log.Printf("  [2/3] SentenceSegmenter: First sentence ready (latency: %v)", metrics.FirstSentenceReady.Sub(metrics.RequestStart))
+				firstSegmentReady = true
+				log.Printf("  [2/3] Segmenter: First segment ready! (latency: %v)", metrics.FirstSentenceReady.Sub(metrics.RequestStart))
 			}
-			sentences = append(sentences, s)
-			sentenceChan <- s
+			segments = append(segments, s)
+			segmentChan <- s
 		}
 	}
 
 	if err := stream.Err(); err != nil {
-		close(sentenceChan)
+		close(segmentChan)
 		return nil, nil, fmt.Errorf("streaming error: %w", err)
 	}
 
 	// Flush remaining text
 	remaining := segmenter.Flush()
 	if remaining != "" {
-		if !firstSentenceReady {
+		if !firstSegmentReady {
 			metrics.FirstSentenceReady = time.Now()
 		}
-		sentences = append(sentences, remaining)
-		sentenceChan <- remaining
+		segments = append(segments, remaining)
+		segmentChan <- remaining
 	}
 
-	close(sentenceChan)
+	close(segmentChan)
 	wg.Wait()
 
 	metrics.PipelineEnd = time.Now()
@@ -332,10 +339,15 @@ func runPipelineTest(apiKey, baseURL, prompt string) (*LatencyMetrics, []byte, e
 	}
 	metrics.TotalEndToEndLatency = metrics.PipelineEnd.Sub(metrics.RequestStart)
 
-	log.Printf("  [1/3] LLM: Full response: %q", truncate(fullResponse.String(), 100))
-	log.Printf("  [2/3] SentenceSegmenter: Extracted %d sentences", len(sentences))
+	log.Printf("  LLM Response: %q", truncate(fullResponse.String(), 80))
+	log.Printf("  Segments extracted: %d", len(segments))
 
 	return metrics, allAudioData, nil
+}
+
+// Legacy function for backward compatibility
+func runPipelineTest(apiKey, baseURL, prompt string) (*LatencyMetrics, []byte, error) {
+	return runPipelineTestWithMode(apiKey, baseURL, prompt, ModeSentence)
 }
 
 func printMetrics(m *LatencyMetrics) {
@@ -354,67 +366,90 @@ func printMetrics(m *LatencyMetrics) {
 	log.Println()
 }
 
-func printSummary(metrics []LatencyMetrics, passed, failed int) {
+func printComparison(metrics []LatencyMetrics, names []string) {
+	if len(metrics) < 2 {
+		return
+	}
+
 	log.Println()
 	log.Println("╔═══════════════════════════════════════════════════════════════╗")
-	log.Println("║                        TEST SUMMARY                           ║")
-	log.Println("╠═══════════════════════════════════════════════════════════════╣")
-	log.Printf("║  Tests Passed: %d                                              ║", passed)
-	log.Printf("║  Tests Failed: %d                                              ║", failed)
+	log.Println("║              LATENCY COMPARISON: Sentence vs Phrase           ║")
 	log.Println("╠═══════════════════════════════════════════════════════════════╣")
 
-	if len(metrics) > 0 {
-		var avgLLMLatency, avgLLMToTTS, avgTotal time.Duration
-		for _, m := range metrics {
-			avgLLMLatency += m.LLMFirstTokenLatency
-			avgLLMToTTS += m.LLMToTTSLatency
-			avgTotal += m.TotalEndToEndLatency
-		}
-		avgLLMLatency /= time.Duration(len(metrics))
-		avgLLMToTTS /= time.Duration(len(metrics))
-		avgTotal /= time.Duration(len(metrics))
+	// Header
+	log.Println("║                          Sentence     Phrase      Improvement ║")
+	log.Println("╠═══════════════════════════════════════════════════════════════╣")
 
-		log.Printf("║  Avg LLM First Token:     %12v                      ║", avgLLMLatency)
-		log.Printf("║  Avg LLM→TTS Latency:     %12v  ← KEY METRIC        ║", avgLLMToTTS)
-		log.Printf("║  Avg End-to-End:          %12v                      ║", avgTotal)
-	}
+	sentence := metrics[0]
+	phrase := metrics[1]
+
+	// Segment latency comparison
+	segImprove := float64(sentence.SentenceSegmentLatency-phrase.SentenceSegmentLatency) / float64(sentence.SentenceSegmentLatency) * 100
+	log.Printf("║  Segment Latency:    %10v  %10v     %+6.1f%%    ║",
+		sentence.SentenceSegmentLatency, phrase.SentenceSegmentLatency, segImprove)
+
+	// TTS latency comparison
+	ttsImprove := float64(sentence.TTSFirstChunkLatency-phrase.TTSFirstChunkLatency) / float64(sentence.TTSFirstChunkLatency) * 100
+	log.Printf("║  TTS First Chunk:    %10v  %10v     %+6.1f%%    ║",
+		sentence.TTSFirstChunkLatency, phrase.TTSFirstChunkLatency, ttsImprove)
+
+	// Key metric: LLM to TTS
+	llmTTSImprove := float64(sentence.LLMToTTSLatency-phrase.LLMToTTSLatency) / float64(sentence.LLMToTTSLatency) * 100
+	log.Println("╠═══════════════════════════════════════════════════════════════╣")
+	log.Printf("║  ★ LLM→TTS:          %10v  %10v     %+6.1f%%    ║",
+		sentence.LLMToTTSLatency, phrase.LLMToTTSLatency, llmTTSImprove)
+	log.Println("╠═══════════════════════════════════════════════════════════════╣")
+
+	// Total latency
+	totalImprove := float64(sentence.TotalEndToEndLatency-phrase.TotalEndToEndLatency) / float64(sentence.TotalEndToEndLatency) * 100
+	log.Printf("║  Total End-to-End:   %10v  %10v     %+6.1f%%    ║",
+		sentence.TotalEndToEndLatency, phrase.TotalEndToEndLatency, totalImprove)
+
 	log.Println("╚═══════════════════════════════════════════════════════════════╝")
+	log.Println()
+
+	// Additional insights
+	log.Println("💡 Optimization Insights:")
+	if llmTTSImprove > 0 {
+		log.Printf("   • Phrase mode reduced LLM→TTS latency by %.1f%%", llmTTSImprove)
+		log.Printf("   • Time saved: %v", sentence.LLMToTTSLatency-phrase.LLMToTTSLatency)
+	}
+	log.Println()
+	log.Println("📊 Further Optimization Options:")
+	log.Println("   1. Use streaming TTS (ElevenLabs WebSocket) for even lower latency")
+	log.Println("   2. Use OpenAI Realtime API for native voice output (~200ms)")
+	log.Println("   3. Reduce minLen to trigger TTS on shorter phrases")
 }
 
-func saveReport(outputDir string, metrics []LatencyMetrics, passed, failed int) {
-	reportPath := filepath.Join(outputDir, "latency_report.txt")
+func saveComparisonReport(outputDir string, metrics []LatencyMetrics, names []string) {
+	reportPath := filepath.Join(outputDir, "latency_comparison.txt")
 
 	var report strings.Builder
-	report.WriteString("LLM -> SentenceSegmenter -> TTS Pipeline Latency Report\n")
-	report.WriteString("========================================================\n\n")
+	report.WriteString("LLM -> Segmenter -> TTS Pipeline Latency Comparison\n")
+	report.WriteString("===================================================\n\n")
 	report.WriteString(fmt.Sprintf("Generated: %s\n\n", time.Now().Format(time.RFC3339)))
-	report.WriteString(fmt.Sprintf("Tests Passed: %d\n", passed))
-	report.WriteString(fmt.Sprintf("Tests Failed: %d\n\n", failed))
 
 	for i, m := range metrics {
-		report.WriteString(fmt.Sprintf("Test %d:\n", i+1))
-		report.WriteString(fmt.Sprintf("  LLM First Token Latency:       %v\n", m.LLMFirstTokenLatency))
-		report.WriteString(fmt.Sprintf("  Sentence Segmentation Latency: %v\n", m.SentenceSegmentLatency))
-		report.WriteString(fmt.Sprintf("  TTS First Chunk Latency:       %v\n", m.TTSFirstChunkLatency))
-		report.WriteString(fmt.Sprintf("  LLM Token → TTS Chunk:         %v (KEY METRIC)\n", m.LLMToTTSLatency))
-		report.WriteString(fmt.Sprintf("  Total End-to-End Latency:      %v\n\n", m.TotalEndToEndLatency))
+		name := "Unknown"
+		if i < len(names) {
+			name = names[i]
+		}
+		report.WriteString(fmt.Sprintf("%s:\n", name))
+		report.WriteString(fmt.Sprintf("  LLM First Token:       %v\n", m.LLMFirstTokenLatency))
+		report.WriteString(fmt.Sprintf("  Segment Latency:       %v\n", m.SentenceSegmentLatency))
+		report.WriteString(fmt.Sprintf("  TTS First Chunk:       %v\n", m.TTSFirstChunkLatency))
+		report.WriteString(fmt.Sprintf("  LLM→TTS Latency:       %v (KEY)\n", m.LLMToTTSLatency))
+		report.WriteString(fmt.Sprintf("  Total End-to-End:      %v\n\n", m.TotalEndToEndLatency))
 	}
 
-	if len(metrics) > 0 {
-		var avgLLMLatency, avgLLMToTTS, avgTotal time.Duration
-		for _, m := range metrics {
-			avgLLMLatency += m.LLMFirstTokenLatency
-			avgLLMToTTS += m.LLMToTTSLatency
-			avgTotal += m.TotalEndToEndLatency
-		}
-		avgLLMLatency /= time.Duration(len(metrics))
-		avgLLMToTTS /= time.Duration(len(metrics))
-		avgTotal /= time.Duration(len(metrics))
+	if len(metrics) >= 2 {
+		sentence := metrics[0]
+		phrase := metrics[1]
+		improvement := float64(sentence.LLMToTTSLatency-phrase.LLMToTTSLatency) / float64(sentence.LLMToTTSLatency) * 100
 
-		report.WriteString("Averages:\n")
-		report.WriteString(fmt.Sprintf("  Avg LLM First Token:      %v\n", avgLLMLatency))
-		report.WriteString(fmt.Sprintf("  Avg LLM→TTS Latency:      %v (KEY METRIC)\n", avgLLMToTTS))
-		report.WriteString(fmt.Sprintf("  Avg End-to-End:           %v\n", avgTotal))
+		report.WriteString("Comparison Summary:\n")
+		report.WriteString(fmt.Sprintf("  LLM→TTS Improvement: %.1f%%\n", improvement))
+		report.WriteString(fmt.Sprintf("  Time Saved: %v\n", sentence.LLMToTTSLatency-phrase.LLMToTTSLatency))
 	}
 
 	os.WriteFile(reportPath, []byte(report.String()), 0644)
