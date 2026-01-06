@@ -58,6 +58,7 @@ type SegmentMode int
 const (
 	ModeSentence SegmentMode = iota // Wait for complete sentences (.!?)
 	ModePhrase                      // Split on phrases (,;: etc.) - lower latency
+	ModeHybrid                      // First segment uses Phrase, rest use Sentence (best of both)
 )
 
 // TTSMode defines whether to use streaming or non-streaming TTS
@@ -70,9 +71,10 @@ const (
 
 // TextSegmenter provides configurable text boundary detection
 type TextSegmenter struct {
-	buffer strings.Builder
-	minLen int
-	mode   SegmentMode
+	buffer              strings.Builder
+	minLen              int
+	mode                SegmentMode
+	firstSegmentEmitted bool // For ModeHybrid: track if first segment was sent
 }
 
 func NewTextSegmenter(minLen int, mode SegmentMode) *TextSegmenter {
@@ -100,6 +102,14 @@ func (s *TextSegmenter) extractSegments() []string {
 	case ModePhrase:
 		// More aggressive splitting for lower latency
 		delimiters = ".!?;:,。！？；：，"
+	case ModeHybrid:
+		// Hybrid mode: use Phrase delimiters for first segment (fast TTFB),
+		// then switch to Sentence delimiters for natural speech quality
+		if !s.firstSegmentEmitted {
+			delimiters = ".!?;:,。！？；：，"
+		} else {
+			delimiters = ".!?。！？"
+		}
 	default:
 		// Sentence-level splitting
 		delimiters = ".!?。！？"
@@ -113,6 +123,10 @@ func (s *TextSegmenter) extractSegments() []string {
 			if len(segment) >= s.minLen {
 				segments = append(segments, segment)
 				lastEnd = i + utf8.RuneLen(r)
+				// For hybrid mode: mark first segment as emitted
+				if s.mode == ModeHybrid && !s.firstSegmentEmitted {
+					s.firstSegmentEmitted = true
+				}
 			}
 		}
 	}
@@ -145,9 +159,10 @@ func main() {
 	log.Println("║   LLM -> Segmenter -> TTS Pipeline Latency Comparison Test   ║")
 	log.Println("╚═══════════════════════════════════════════════════════════════╝")
 	log.Println()
-	log.Println("Comparing optimization strategies:")
-	log.Println("  • Segmentation: Sentence (.!?) vs Phrase (,;:)")
-	log.Println("  • TTS Mode: Non-streaming vs Streaming")
+	log.Println("Comparing segmentation strategies:")
+	log.Println("  • Sentence: Full sentences only (.!?)")
+	log.Println("  • Phrase: Split on phrases (,;:) - lower TTFB")
+	log.Println("  • Hybrid: First segment uses Phrase, then Sentence (best of both)")
 	log.Println()
 
 	// Test prompt for comparison
@@ -165,7 +180,7 @@ func main() {
 	}{
 		{"1. Sentence + Non-streaming TTS (baseline)", ModeSentence, TTSNonStreaming},
 		{"2. Phrase + Non-streaming TTS", ModePhrase, TTSNonStreaming},
-		{"3. Phrase + Streaming TTS (optimized)", ModePhrase, TTSStreaming},
+		{"3. Hybrid (Phrase first, then Sentence) + Non-streaming TTS", ModeHybrid, TTSNonStreaming},
 	}
 
 	var allMetrics []LatencyMetrics
