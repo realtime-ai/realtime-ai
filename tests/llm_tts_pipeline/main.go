@@ -277,7 +277,7 @@ func runPipelineTestWithConfig(apiKey, baseURL, prompt string, segMode SegmentMo
 				log.Println("  [3/3] TTS: Streaming synthesis...")
 				audioChan, errChan := ttsProvider.StreamSynthesize(ctx, &tts.SynthesizeRequest{
 					Text:  segment,
-					Voice: "alloy",
+					Voice: "coral",
 				})
 
 				for {
@@ -310,7 +310,7 @@ func runPipelineTestWithConfig(apiKey, baseURL, prompt string, segMode SegmentMo
 				log.Println("  [3/3] TTS: Non-streaming synthesis...")
 				resp, err := ttsProvider.Synthesize(ctx, &tts.SynthesizeRequest{
 					Text:  segment,
-					Voice: "alloy",
+					Voice: "coral",
 				})
 				if err != nil {
 					log.Printf("  Warning: TTS failed: %v", err)
