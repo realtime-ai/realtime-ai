@@ -36,6 +36,16 @@ type TextData struct {
 	Timestamp time.Time
 }
 
+// ImageData 图像数据结构
+// 用于在 Pipeline 中传输静态图像（区别于 VideoData 的视频帧流）
+type ImageData struct {
+	Data      []byte    // 图像字节数据（JPEG/PNG/WebP 编码）
+	MIMEType  string    // MIME 类型: image/jpeg, image/png, image/webp, image/gif
+	Width     int       // 图像宽度（可选，0 表示未知）
+	Height    int       // 图像高度（可选，0 表示未知）
+	Timestamp time.Time // 时间戳
+}
+
 type PipelineMessageType int
 
 const (
@@ -43,6 +53,7 @@ const (
 	MsgTypeVideo
 	MsgTypeData
 	MsgTypeCommand
+	MsgTypeImage // 静态图像消息类型
 )
 
 type PipelineMessage struct {
@@ -61,6 +72,9 @@ type PipelineMessage struct {
 
 	// TextData 文本数据块
 	TextData *TextData
+
+	// ImageData 图像数据块
+	ImageData *ImageData
 
 	// Metadata 元数据
 	Metadata interface{}

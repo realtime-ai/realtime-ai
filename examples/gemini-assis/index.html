@@ -308,6 +308,91 @@
             font-weight: 400;
         }
 
+        /* Image Controls */
+        .image-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 28px;
+            padding: 16px 20px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            border-radius: 16px;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        .image-controls input[type="file"] {
+            display: none;
+        }
+
+        .image-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #4ecdc4 0%, #44a08d 100%);
+            color: white;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 12px rgba(78, 205, 196, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .image-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(78, 205, 196, 0.4);
+        }
+
+        .image-btn:disabled {
+            background: linear-gradient(135deg, #adb5bd 0%, #868e96 100%);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .image-btn svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .image-preview {
+            display: none;
+            margin-bottom: 28px;
+            padding: 16px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            border-radius: 16px;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            text-align: center;
+        }
+
+        .image-preview.show {
+            display: block;
+        }
+
+        .image-preview img {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .image-preview .status {
+            margin-top: 12px;
+            font-size: 13px;
+            color: #868e96;
+        }
+
+        .image-preview .status.sending {
+            color: #ffd93d;
+        }
+
+        .image-preview .status.sent {
+            color: #51cf66;
+        }
+
         /* Audio Controls */
         .audio-controls {
             display: flex;
@@ -456,6 +541,29 @@
             <div id="assistantSubtitle" class="subtitle-text assistant" style="margin-top: 12px;"></div>
         </div>
 
+        <!-- Image Controls -->
+        <div class="image-controls">
+            <input type="file" id="imageInput" accept="image/jpeg,image/png,image/webp,image/gif">
+            <button id="uploadImageBtn" class="image-btn" disabled>
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                </svg>
+                Upload Image
+            </button>
+            <button id="cameraBtn" class="image-btn" disabled>
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 15c1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3 1.34 3 3 3zm7-9h-2.59l-1.83-2H9.41L7.59 6H5c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/>
+                </svg>
+                Camera
+            </button>
+        </div>
+
+        <!-- Image Preview -->
+        <div id="imagePreview" class="image-preview">
+            <img id="previewImg" src="" alt="Preview">
+            <div id="imageStatus" class="status">Ready to send</div>
+        </div>
+
         <!-- Text Input -->
         <div class="input-group">
             <input type="text" id="messageInput" placeholder="Type a message or just speak..." disabled>
@@ -518,6 +626,12 @@
         const assistantSubtitleEl = document.getElementById('assistantSubtitle');
         const micStatusEl = document.getElementById('micStatus');
         const eventLogEl = document.getElementById('eventLog');
+        const imageInput = document.getElementById('imageInput');
+        const uploadImageBtn = document.getElementById('uploadImageBtn');
+        const cameraBtn = document.getElementById('cameraBtn');
+        const imagePreviewEl = document.getElementById('imagePreview');
+        const previewImgEl = document.getElementById('previewImg');
+        const imageStatusEl = document.getElementById('imageStatus');
 
         // Toggle event log visibility
         function toggleEventLog() {
@@ -688,6 +802,140 @@
             messageInput.value = '';
         }
 
+        // Send image via DataChannel
+        function sendImage(file) {
+            if (!dc || dc.readyState !== 'open') {
+                logEvent('error', 'DataChannel not open');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                // Show preview
+                previewImgEl.src = reader.result;
+                imagePreviewEl.classList.add('show');
+                imageStatusEl.textContent = 'Sending...';
+                imageStatusEl.className = 'status sending';
+
+                // Extract base64 data (remove data URL prefix)
+                const base64Data = reader.result.split(',')[1];
+
+                // Send image message
+                const imageMessage = {
+                    type: 'image',
+                    data: base64Data,
+                    mime_type: file.type || 'image/jpeg'
+                };
+
+                dc.send(JSON.stringify(imageMessage));
+                logEvent('sent', `image: ${file.type}, ${Math.round(file.size / 1024)}KB`);
+
+                // Update status
+                imageStatusEl.textContent = 'Image sent! Waiting for AI response...';
+                imageStatusEl.className = 'status sent';
+
+                // Add to conversation
+                addImageMessage('user', reader.result);
+
+                // Hide preview after a delay
+                setTimeout(() => {
+                    imagePreviewEl.classList.remove('show');
+                }, 3000);
+            };
+
+            reader.onerror = () => {
+                logEvent('error', 'Failed to read image file');
+                imageStatusEl.textContent = 'Failed to read image';
+                imageStatusEl.className = 'status';
+            };
+
+            reader.readAsDataURL(file);
+        }
+
+        // Add image message to conversation
+        function addImageMessage(role, imageSrc) {
+            const msg = document.createElement('div');
+            msg.className = `message ${role}`;
+            msg.innerHTML = `
+                <div class="role">${role === 'user' ? 'You' : 'Assistant'}</div>
+                <div class="content">
+                    <img src="${imageSrc}" style="max-width: 200px; max-height: 150px; border-radius: 8px;">
+                </div>
+                <div class="timestamp">${new Date().toLocaleTimeString()}</div>
+            `;
+            conversationEl.appendChild(msg);
+            conversationEl.scrollTop = conversationEl.scrollHeight;
+        }
+
+        // Handle file selection
+        function handleImageSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                // Validate file type
+                if (!file.type.startsWith('image/')) {
+                    logEvent('error', 'Please select an image file');
+                    return;
+                }
+
+                // Validate file size (max 5MB)
+                if (file.size > 5 * 1024 * 1024) {
+                    logEvent('error', 'Image too large (max 5MB)');
+                    return;
+                }
+
+                sendImage(file);
+            }
+            // Reset input for re-selection
+            e.target.value = '';
+        }
+
+        // Camera capture
+        async function captureFromCamera() {
+            try {
+                // Request camera access
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' }
+                });
+
+                // Create video element
+                const video = document.createElement('video');
+                video.srcObject = stream;
+                video.autoplay = true;
+                video.playsInline = true;
+
+                // Wait for video to be ready
+                await new Promise(resolve => {
+                    video.onloadedmetadata = resolve;
+                });
+                await video.play();
+
+                // Wait a moment for camera to adjust
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                // Capture frame to canvas
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0);
+
+                // Stop camera
+                stream.getTracks().forEach(track => track.stop());
+
+                // Convert to blob and send
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        const file = new File([blob], 'camera-capture.jpg', { type: 'image/jpeg' });
+                        sendImage(file);
+                    }
+                }, 'image/jpeg', 0.85);
+
+            } catch (err) {
+                console.error('Camera error:', err);
+                logEvent('error', `Camera error: ${err.message}`);
+            }
+        }
+
         // Connect to WebRTC server
         async function connect() {
             try {
@@ -707,6 +955,8 @@
                     connectBtn.disabled = false;
                     messageInput.disabled = false;
                     sendBtn.disabled = false;
+                    uploadImageBtn.disabled = false;
+                    cameraBtn.disabled = false;
                     micStatusEl.classList.add('active');
                     micStatusEl.querySelector('span').textContent = 'Microphone Active';
                     logEvent('received', 'DataChannel opened');
@@ -828,6 +1078,9 @@
             connectBtn.className = '';
             messageInput.disabled = true;
             sendBtn.disabled = true;
+            uploadImageBtn.disabled = true;
+            cameraBtn.disabled = true;
+            imagePreviewEl.classList.remove('show');
             micStatusEl.classList.remove('active');
             micStatusEl.querySelector('span').textContent = 'Microphone Off';
             userSubtitleEl.className = 'subtitle-text empty';
@@ -853,6 +1106,17 @@
                 sendTextMessage(messageInput.value);
             }
         });
+
+        // Image upload handlers
+        uploadImageBtn.onclick = () => {
+            imageInput.click();
+        };
+
+        imageInput.addEventListener('change', handleImageSelect);
+
+        cameraBtn.onclick = () => {
+            captureFromCamera();
+        };
 
         // Cleanup on page unload
         window.addEventListener('beforeunload', () => {

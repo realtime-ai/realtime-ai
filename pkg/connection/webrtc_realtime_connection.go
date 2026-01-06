@@ -3,6 +3,7 @@ package connection
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -26,6 +27,10 @@ type WebRTCRealtimeEventHandler interface {
 	// Data is PCM audio (int16 samples, little-endian).
 	OnAudioReceived(data []byte, sampleRate, channels int, timestamp time.Time)
 
+	// OnImageReceived is called when an image is received via DataChannel.
+	// Data is the raw image bytes, mimeType indicates the format (e.g., "image/jpeg").
+	OnImageReceived(data []byte, mimeType string, width, height int, timestamp time.Time)
+
 	// OnClientEvent is called when a Realtime API event is received via DataChannel.
 	OnClientEvent(event events.ClientEvent)
 
@@ -39,6 +44,8 @@ type NoOpWebRTCRealtimeEventHandler struct{}
 func (h *NoOpWebRTCRealtimeEventHandler) OnConnectionStateChange(state webrtc.PeerConnectionState) {
 }
 func (h *NoOpWebRTCRealtimeEventHandler) OnAudioReceived(data []byte, sampleRate, channels int, timestamp time.Time) {
+}
+func (h *NoOpWebRTCRealtimeEventHandler) OnImageReceived(data []byte, mimeType string, width, height int, timestamp time.Time) {
 }
 func (h *NoOpWebRTCRealtimeEventHandler) OnClientEvent(event events.ClientEvent) {}
 func (h *NoOpWebRTCRealtimeEventHandler) OnError(err error)                      {}
@@ -196,8 +203,44 @@ func (c *webrtcRealtimeConnectionImpl) Start(ctx context.Context) error {
 	return nil
 }
 
-// handleDataChannelMessage parses and dispatches Realtime API events.
+// imagePayload 定义 DataChannel 中图像消息的 JSON 格式
+type imagePayload struct {
+	Type     string `json:"type"`      // "image"
+	Data     string `json:"data"`      // Base64 编码的图像数据
+	MIMEType string `json:"mime_type"` // image/jpeg, image/png, image/webp
+	Width    int    `json:"width,omitempty"`
+	Height   int    `json:"height,omitempty"`
+}
+
+// handleDataChannelMessage parses and dispatches Realtime API events or image messages.
 func (c *webrtcRealtimeConnectionImpl) handleDataChannelMessage(data []byte) {
+	// 先尝试解析为通用 JSON 检查消息类型
+	var genericMsg map[string]interface{}
+	if err := json.Unmarshal(data, &genericMsg); err == nil {
+		// 检查是否为图像消息
+		if msgType, ok := genericMsg["type"].(string); ok && msgType == "image" {
+			var imgPayload imagePayload
+			if err := json.Unmarshal(data, &imgPayload); err != nil {
+				log.Printf("[webrtc-realtime %s] failed to parse image payload: %v", c.sessionID, err)
+				c.handler.OnError(err)
+				return
+			}
+
+			// Base64 解码图像数据
+			imageData, err := base64.StdEncoding.DecodeString(imgPayload.Data)
+			if err != nil {
+				log.Printf("[webrtc-realtime %s] failed to decode image data: %v", c.sessionID, err)
+				c.handler.OnError(err)
+				return
+			}
+
+			log.Printf("[webrtc-realtime %s] received image: %s, %d bytes", c.sessionID, imgPayload.MIMEType, len(imageData))
+			c.handler.OnImageReceived(imageData, imgPayload.MIMEType, imgPayload.Width, imgPayload.Height, time.Now())
+			return
+		}
+	}
+
+	// 作为 Realtime API 事件处理
 	event, err := events.ParseClientEvent(data)
 	if err != nil {
 		log.Printf("[webrtc-realtime %s] failed to parse client event: %v", c.sessionID, err)

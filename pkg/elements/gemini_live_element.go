@@ -132,7 +132,7 @@ func (e *GeminiLiveElement) Start(ctx context.Context) error {
 	e.session = session
 	log.Printf("[GEMINI] 成功连接到 Gemini Live API (模型: %s)", e.model)
 
-	// 启动音频输入处理协程
+	// 启动输入处理协程（音频、图像、文本）
 	e.wg.Add(1)
 	go func() {
 		defer e.wg.Done()
@@ -162,6 +162,43 @@ func (e *GeminiLiveElement) Start(ctx context.Context) error {
 						}
 					} else {
 						log.Println("[GEMINI] session 为空，无法发送音频")
+					}
+				} else if msg.Type == pipeline.MsgTypeImage {
+					// 处理图像消息
+					if msg.ImageData == nil || len(msg.ImageData.Data) == 0 {
+						continue
+					}
+
+					if e.session != nil {
+						log.Printf("[GEMINI] 发送图像到 Gemini: %s, %d bytes", msg.ImageData.MIMEType, len(msg.ImageData.Data))
+
+						// 将图像作为 ClientContent 发送
+						liveMsg := genai.LiveClientMessage{
+							ClientContent: &genai.LiveClientContent{
+								Turns: []*genai.Content{
+									{
+										Role: "user",
+										Parts: []*genai.Part{
+											{
+												InlineData: &genai.Blob{
+													MIMEType: msg.ImageData.MIMEType,
+													Data:     msg.ImageData.Data,
+												},
+											},
+										},
+									},
+								},
+								TurnComplete: true,
+							},
+						}
+
+						if err := e.session.Send(&liveMsg); err != nil {
+							log.Println("[GEMINI] AI session send image error:", err)
+							continue
+						}
+						log.Printf("[GEMINI] 图像发送成功")
+					} else {
+						log.Println("[GEMINI] session 为空，无法发送图像")
 					}
 				} else if msg.Type == pipeline.MsgTypeData {
 					liveMsg := genai.LiveClientMessage{}
