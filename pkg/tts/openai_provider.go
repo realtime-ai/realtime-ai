@@ -73,9 +73,9 @@ type OpenAITTSRequest struct {
 	Input          string  `json:"input"`
 	Voice          string  `json:"voice"`
 	ResponseFormat string  `json:"response_format,omitempty"`
-	Speed          float64 `json:"speed,omitempty"`          // 0.25 to 4.0, default 1.0
-	Instructions   string  `json:"instructions,omitempty"`   // Voice style instructions
-	StreamFormat   string  `json:"stream_format,omitempty"`  // "sse" for streaming
+	Speed          float64 `json:"speed,omitempty"`         // 0.25 to 4.0, default 1.0
+	Instructions   string  `json:"instructions,omitempty"`  // Voice style instructions
+	StreamFormat   string  `json:"stream_format,omitempty"` // "sse" for streaming
 }
 
 // OpenAISSEEvent represents an SSE event from OpenAI streaming response
