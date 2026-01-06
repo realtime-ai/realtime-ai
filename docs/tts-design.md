@@ -2,7 +2,7 @@
 
 ## Overview
 
-The TTS (Text-to-Speech) system in Realtime AI uses a **provider pattern** for extensibility. This design allows you to easily integrate multiple TTS services (OpenAI, Azure, ElevenLabs, etc.) and switch between them without changing your pipeline code.
+The TTS (Text-to-Speech) system in Realtime AI uses a **provider pattern** for extensibility. This design allows you to easily integrate multiple TTS services (OpenAI, ElevenLabs, etc.) and switch between them without changing your pipeline code.
 
 ## Architecture
 
@@ -16,11 +16,11 @@ The TTS (Text-to-Speech) system in Realtime AI uses a **provider pattern** for e
 │  TextData → UniversalTTSElement → Audio│
 │                    │                    │
 │                    ↓                    │
-│              TTSProvider                │
+│         TTSProvider / StreamingTTSProvider
 │                    │                    │
 │         ┌──────────┴──────────┐        │
 │         │          │          │        │
-│   OpenAIProvider AzureProvider ...     │
+│   OpenAIProvider ElevenLabs  ...       │
 └─────────────────────────────────────────┘
 ```
 
@@ -40,32 +40,57 @@ type TTSProvider interface {
 }
 ```
 
-#### 2. UniversalTTSElement (`pkg/elements/universal_tts_element.go`)
+#### 2. StreamingTTSProvider Interface
+
+For providers that support streaming audio:
+
+```go
+type StreamingTTSProvider interface {
+    TTSProvider
+    StreamSynthesize(ctx context.Context, req *SynthesizeRequest) (<-chan []byte, <-chan error)
+}
+```
+
+#### 3. UniversalTTSElement (`pkg/elements/universal_tts_element.go`)
 
 A pipeline element that accepts any `TTSProvider`, allowing you to use different TTS services interchangeably.
 
-#### 3. Provider Implementations
+#### 4. Provider Implementations
 
-- **OpenAITTSProvider** (`pkg/tts/openai_provider.go`): OpenAI TTS API integration
-- **AzureTTSProvider**: Can be refactored from existing `AzureTTSElement`
-- Future providers: ElevenLabs, Google Cloud TTS, AWS Polly, etc.
+- **OpenAITTSProvider** (`pkg/tts/openai_provider.go`): OpenAI gpt-4o-mini-tts with SSE streaming
+- **ElevenLabsHTTPTTSProvider**: ElevenLabs HTTP streaming
+- **ElevenLabsWSTTSProvider**: ElevenLabs WebSocket low-latency streaming
 
 ## OpenAI TTS Integration
 
 ### Features
 
-- **Models**:
-  - `tts-1`: Standard quality, lower latency
-  - `tts-1-hd`: High definition quality
+- **Model**: `gpt-4o-mini-tts` (default), `gpt-4o-mini-tts-2025-12-15` (latest)
 
-- **Voices**: alloy, echo, fable, onyx, nova, shimmer
+- **Voices**: alloy, ash, ballad, coral, echo, fable, nova, onyx, sage, shimmer, verse, marin, cedar
+  - Recommended: marin, cedar (highest quality)
 
 - **Formats**: PCM (raw), Opus, MP3, WAV, AAC, FLAC
 
 - **Options**:
   - Speed control (0.25x to 4.0x)
-  - Multiple output formats
-  - Streaming support (future enhancement)
+  - Voice instructions for tone/style control
+  - SSE streaming support
+
+### Voice Instructions
+
+The gpt-4o-mini-tts model supports voice instructions to control:
+- Accent
+- Emotional range
+- Intonation
+- Speed of speech
+- Tone
+- Whispering
+
+```go
+provider.SetInstructions("Speak in a cheerful and enthusiastic tone")
+provider.SetInstructions("Talk like a sympathetic customer service agent")
+```
 
 ### Usage Examples
 
@@ -80,23 +105,46 @@ import (
 // Create OpenAI provider
 provider := tts.NewOpenAITTSProvider("your-api-key")
 
+// Set voice instructions
+provider.SetInstructions("Speak calmly and clearly")
+
 // Create TTS element
 ttsElement := elements.NewUniversalTTSElement(provider)
 
 // Configure
-ttsElement.SetVoice("nova")
+ttsElement.SetVoice("coral")
 ttsElement.SetOption("speed", 1.2)
 
 // Use in pipeline
 pipeline.AddElement(ttsElement)
 ```
 
-#### Using HD Model
+#### Streaming Mode
 
 ```go
-// Use HD model for higher quality
-provider := tts.NewOpenAITTSProviderHD("your-api-key")
-ttsElement := elements.NewUniversalTTSElement(provider)
+// Use SSE streaming for real-time audio
+provider := tts.NewOpenAITTSProvider(apiKey)
+
+req := &tts.SynthesizeRequest{
+    Text:  "Hello, this is streaming audio!",
+    Voice: "marin",
+}
+
+audioChan, errChan := provider.StreamSynthesize(ctx, req)
+
+for {
+    select {
+    case chunk, ok := <-audioChan:
+        if !ok {
+            return // Stream complete
+        }
+        processAudioChunk(chunk)
+    case err := <-errChan:
+        if err != nil {
+            log.Printf("Error: %v", err)
+        }
+    }
+}
 ```
 
 #### In a Complete Pipeline
@@ -107,8 +155,9 @@ pipeline := pipeline.NewPipeline("my-pipeline")
 
 // Add TTS element
 openaiProvider := tts.NewOpenAITTSProvider("")
+openaiProvider.SetInstructions("Speak in a friendly tone")
 ttsElement := elements.NewUniversalTTSElement(openaiProvider)
-ttsElement.SetVoice("alloy")
+ttsElement.SetVoice("coral")
 
 // Add other elements
 audioPacerElement := elements.NewAudioPacerSinkElement()
@@ -139,11 +188,13 @@ var provider tts.TTSProvider
 
 switch config.TTSProvider {
 case "openai":
-    provider = tts.NewOpenAITTSProvider(apiKey)
-case "azure":
-    provider = tts.NewAzureTTSProvider(subscriptionKey, region)
-case "elevenlabs":
-    provider = tts.NewElevenLabsProvider(apiKey)
+    p := tts.NewOpenAITTSProvider(apiKey)
+    p.SetInstructions("Speak naturally")
+    provider = p
+case "elevenlabs-http":
+    provider = tts.NewElevenLabsHTTPTTSProvider(config)
+case "elevenlabs-ws":
+    provider, _ = tts.NewElevenLabsWSTTSProvider(config)
 }
 
 ttsElement := elements.NewUniversalTTSElement(provider)
@@ -194,7 +245,27 @@ func (p *MyTTSProvider) ValidateConfig() error {
 }
 ```
 
-### Step 2: Use with UniversalTTSElement
+### Step 2: (Optional) Implement StreamingTTSProvider
+
+```go
+func (p *MyTTSProvider) StreamSynthesize(ctx context.Context, req *SynthesizeRequest) (<-chan []byte, <-chan error) {
+    audioChan := make(chan []byte, 100)
+    errChan := make(chan error, 1)
+
+    go func() {
+        defer close(audioChan)
+        defer close(errChan)
+        // Streaming implementation
+    }()
+
+    return audioChan, errChan
+}
+
+// Verify interface implementation
+var _ StreamingTTSProvider = (*MyTTSProvider)(nil)
+```
+
+### Step 3: Use with UniversalTTSElement
 
 ```go
 provider := tts.NewMyTTSProvider(apiKey)
@@ -206,85 +277,26 @@ That's it! No need to create a new element type.
 
 ## Advanced Features
 
-### Streaming Support (Future)
-
-For providers that support streaming TTS, you can implement the `StreamingTTSProvider` interface:
-
-```go
-type StreamingTTSProvider interface {
-    TTSProvider
-    StreamSynthesize(ctx context.Context, req *SynthesizeRequest) (<-chan []byte, <-chan error)
-}
-```
-
 ### Configuration via Properties
 
 The `UniversalTTSElement` supports the pipeline property system:
 
 ```go
 // Set properties programmatically
-ttsElement.SetProperty("voice", "nova")
+ttsElement.SetProperty("voice", "coral")
 ttsElement.SetProperty("language", "en-US")
 
 // Get property values
 voice, _ := ttsElement.GetProperty("voice")
 ```
 
-## Comparison with Legacy Approach
+## Provider Comparison
 
-### Old Approach (AzureTTSElement)
-
-- Each TTS service requires a separate element class
-- Tight coupling between element and TTS API
-- Difficult to test and extend
-- Code duplication
-
-```go
-// Need separate classes for each provider
-azureTTS := elements.NewAzureTTSElement()
-// Can't easily switch providers
-```
-
-### New Approach (Provider Pattern)
-
-- Single `UniversalTTSElement` works with all providers
-- Loose coupling via interface
-- Easy to test with mock providers
-- Reusable code
-
-```go
-// One element class, multiple providers
-provider := tts.NewOpenAITTSProvider(apiKey)
-ttsElement := elements.NewUniversalTTSElement(provider)
-
-// Easy to swap providers
-provider2 := tts.NewAzureTTSProvider(key, region)
-ttsElement2 := elements.NewUniversalTTSElement(provider2)
-```
-
-## Migration Guide
-
-If you're using the old `AzureTTSElement`, you have two options:
-
-### Option 1: Continue Using Legacy Element
-
-The old `AzureTTSElement` continues to work:
-
-```go
-azureTTS := elements.NewAzureTTSElement()
-```
-
-### Option 2: Migrate to Provider Pattern
-
-1. Refactor Azure code into `AzureTTSProvider`
-2. Use `UniversalTTSElement`:
-
-```go
-provider := tts.NewAzureTTSProvider(key, region)
-ttsElement := elements.NewUniversalTTSElement(provider)
-```
-
-Benefits: Better testability, easier to add features, consistent API
+| Provider | Streaming | Latency | Quality | Instructions |
+|----------|-----------|---------|---------|--------------|
+| OpenAI gpt-4o-mini-tts | SSE | Medium | High | Yes |
+| ElevenLabs HTTP | HTTP Chunked | Medium | High | No |
+| ElevenLabs WS | WebSocket | Low | High | No |
 
 ## Environment Variables
 
@@ -292,13 +304,13 @@ Benefits: Better testability, easier to add features, consistent API
 
 ```bash
 export OPENAI_API_KEY=sk-...
+export OPENAI_BASE_URL=https://your-proxy.com/v1  # Optional
 ```
 
-### Azure TTS (existing)
+### ElevenLabs
 
 ```bash
-export AZURE_SPEECH_KEY=your-key
-export AZURE_SPEECH_REGION=your-region
+export ELEVENLABS_API_KEY=...
 ```
 
 ## Testing
@@ -339,6 +351,7 @@ func TestTTSElement(t *testing.T) {
 4. **Set appropriate buffer sizes** for the element channels
 5. **Clean up resources** in the Stop() method
 6. **Use environment variables** for API keys (never hardcode)
+7. **Use streaming** for lower latency in real-time applications
 
 ## API References
 
@@ -346,19 +359,9 @@ func TestTTSElement(t *testing.T) {
 
 - Endpoint: `https://api.openai.com/v1/audio/speech`
 - Docs: https://platform.openai.com/docs/guides/text-to-speech
-- Rate limits: Depends on your tier
-- Pricing: $15 per 1M characters (standard), $30 per 1M (HD)
+- Model: gpt-4o-mini-tts
+- Streaming: SSE (stream_format: "sse")
 
 ## Example Projects
 
-- `examples/openai-tts/main.go`: Basic OpenAI TTS demo
-- More examples coming soon
-
-## Future Enhancements
-
-1. **Streaming TTS**: Real-time audio generation for lower latency
-2. **Voice cloning**: Support for custom voice models
-3. **SSML support**: Advanced speech markup
-4. **Batch synthesis**: Process multiple texts efficiently
-5. **Caching**: Cache frequently used phrases
-6. **More providers**: ElevenLabs, Google Cloud TTS, AWS Polly, etc.
+- `examples/openai-tts/main.go`: Basic OpenAI TTS demo with instructions
