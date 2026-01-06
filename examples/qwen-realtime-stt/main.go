@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -157,9 +158,13 @@ func createPipeline(conn connection.Connection) *pipeline.Pipeline {
 		log.Printf("VAD not available (build with -tags vad to enable): %v", err)
 		log.Println("Continuing without VAD optimization...")
 	} else {
-		vadElement = vadElem
-		p.AddElement(vadElement)
-		log.Println("Added: SileroVADElement (Passthrough mode, emits events)")
+		if err := vadElem.Init(context.Background()); err != nil {
+			log.Printf("[Pipeline] Warning: Failed to init VAD element: %v", err)
+		} else {
+			vadElement = vadElem
+			p.AddElement(vadElement)
+			log.Println("Added: SileroVADElement (Passthrough mode, emits events)")
+		}
 	}
 
 	// 3. Qwen Realtime STT Element
@@ -273,7 +278,21 @@ func handlePipelineOutput(conn connection.Connection, p *pipeline.Pipeline) {
 
 		// Send message back to client (if needed)
 		// For STT-only applications, you might send the text data back
-		conn.SendMessage(msg)
+		// Marshal to JSON
+		jsonData, err := json.Marshal(msg.TextData)
+		if err != nil {
+			log.Printf("Failed to marshal event: %v", err)
+			return
+		}
+
+		// Create a text message with event data
+		jsonmsg := &pipeline.PipelineMessage{
+			Type: pipeline.MsgTypeData,
+			TextData: &pipeline.TextData{
+				Data: jsonData,
+			},
+		}
+		conn.SendMessage(jsonmsg)
 	}
 
 	log.Println("Output handler stopped")

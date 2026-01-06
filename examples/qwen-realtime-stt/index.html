@@ -257,10 +257,9 @@
                     }
                     
                     try {
+                        console.log('Received message:', data);
                         const msg = JSON.parse(data);
-                        if (msg.type === 'data' && msg.text_data) {
-                            handleTranscription(msg.text_data);
-                        }
+                        handleTranscription(msg);
                     } catch (e) {
                         console.error('Failed to parse message:', e, data);
                     }
@@ -299,7 +298,7 @@
 
                 const answer = await response.json();
                 sessionIdEl.textContent = answer.session_id;
-                await pc.setRemoteDescription(answer.sdp);
+                await pc.setRemoteDescription(answer);
 
                 disconnectBtn.disabled = false;
 
@@ -313,14 +312,14 @@
         function handleTranscription(textData) {
             try {
                 // Decode base64 to Uint8Array then to UTF-8 string
-                const binaryString = atob(textData.data);
+                const binaryString = atob(textData.Data);
                 const bytes = new Uint8Array(binaryString.length);
                 for (let i = 0; i < binaryString.length; i++) {
                     bytes[i] = binaryString.charCodeAt(i);
                 }
                 const utf8Text = new TextDecoder().decode(bytes);
 
-                if (textData.text_type === 'text/final') {
+                if (textData.TextType === 'text/final') {
                     const finalMsg = document.createElement('span');
                     finalMsg.className = 'final';
                     finalMsg.textContent = utf8Text;
