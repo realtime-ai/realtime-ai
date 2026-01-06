@@ -4,7 +4,7 @@ A flexible, provider-based Text-to-Speech system for Realtime AI.
 
 ## Quick Start
 
-### OpenAI TTS
+### OpenAI TTS (gpt-4o-mini-tts)
 
 ```go
 import "github.com/realtime-ai/realtime-ai/pkg/tts"
@@ -12,10 +12,13 @@ import "github.com/realtime-ai/realtime-ai/pkg/tts"
 // Create provider
 provider := tts.NewOpenAITTSProvider("your-api-key")
 
+// Set voice instructions (optional)
+provider.SetInstructions("Speak in a cheerful and positive tone")
+
 // Synthesize speech
 req := &tts.SynthesizeRequest{
     Text:  "Hello, world!",
-    Voice: "nova",
+    Voice: "coral",
 }
 resp, err := provider.Synthesize(context.Background(), req)
 if err != nil {
@@ -36,33 +39,71 @@ import (
 
 // Create provider and element
 provider := tts.NewOpenAITTSProvider("")
+provider.SetInstructions("Speak calmly and clearly")
 ttsElement := elements.NewUniversalTTSElement(provider)
 
 // Configure
-ttsElement.SetVoice("alloy")
+ttsElement.SetVoice("marin")
 ttsElement.SetOption("speed", 1.2)
 
 // Use in pipeline
 pipeline.AddElement(ttsElement)
 ```
 
+### Streaming Mode
+
+```go
+// Use SSE streaming for lower latency
+audioChan, errChan := provider.StreamSynthesize(ctx, req)
+
+for chunk := range audioChan {
+    // Process audio chunk in real-time
+    processAudio(chunk)
+}
+```
+
 ## OpenAI TTS
+
+### Model
+
+- `gpt-4o-mini-tts`: High quality with instructions support (default)
+- `gpt-4o-mini-tts-2025-12-15`: Latest snapshot with 35% lower WER
 
 ### Voices
 
 | Voice | Description |
 |-------|-------------|
 | alloy | Neutral and balanced |
+| ash | Clear and precise |
+| ballad | Melodic and warm |
+| coral | Natural and conversational (default) |
 | echo | More expressive |
 | fable | British accent |
-| onyx | Deep and authoritative |
 | nova | Energetic and lively |
+| onyx | Deep and authoritative |
+| sage | Calm and thoughtful |
 | shimmer | Soft and gentle |
+| verse | Versatile and adaptive |
+| **marin** | High quality, recommended |
+| **cedar** | High quality, recommended |
 
-### Models
+### Instructions
 
-- `tts-1`: Standard quality (default)
-- `tts-1-hd`: High definition quality
+Control the voice style with natural language instructions:
+
+```go
+provider.SetInstructions("Speak in a cheerful and enthusiastic tone")
+provider.SetInstructions("Talk like a sympathetic customer service agent")
+provider.SetInstructions("Use a calm, professional tone with clear enunciation")
+```
+
+Controllable aspects:
+- Accent
+- Emotional range
+- Intonation
+- Speed of speech
+- Tone
+- Whispering
 
 ### Formats
 
@@ -81,6 +122,9 @@ ttsElement.SetOption("speed", 1.5)
 
 // Output format
 ttsElement.SetOption("format", "opus")
+
+// Voice instructions (per-request override)
+ttsElement.SetOption("instructions", "Speak excitedly")
 ```
 
 ## Creating a Custom Provider
@@ -140,9 +184,8 @@ func (p *MyProvider) ValidateConfig() error {
 # OpenAI
 export OPENAI_API_KEY=sk-...
 
-# Azure (for existing AzureTTSElement)
-export AZURE_SPEECH_KEY=...
-export AZURE_SPEECH_REGION=...
+# Optional: Custom base URL
+export OPENAI_BASE_URL=https://your-proxy.com/v1
 ```
 
 ## Testing
@@ -158,10 +201,13 @@ go run examples/openai-tts/main.go
 
 ```
 TTSProvider (interface)
-    ├── OpenAITTSProvider
-    ├── AzureTTSProvider (future)
-    ├── ElevenLabsProvider (future)
+    ├── OpenAITTSProvider (gpt-4o-mini-tts, streaming)
+    ├── ElevenLabsHTTPTTSProvider
+    ├── ElevenLabsWSTTSProvider (WebSocket streaming)
     └── Your custom provider
+
+StreamingTTSProvider (interface, extends TTSProvider)
+    └── StreamSynthesize() for real-time audio
 
 UniversalTTSElement
     └── Accepts any TTSProvider
