@@ -3,7 +3,8 @@
 // A real-time voice conversation assistant using WebRTC for audio transport.
 //
 // Architecture:
-//   WebRTC (48kHz) → Resample → VAD → 11labs ASR → OpenAI Chat → 11labs TTS → Resample → WebRTC
+//
+//	WebRTC (48kHz) → Resample → VAD → 11labs ASR → OpenAI Chat → 11labs TTS → Resample → WebRTC
 //
 // Features:
 //   - Real-time voice conversation with AI
@@ -232,15 +233,15 @@ func createPipeline(ctx context.Context, session *realtimeapi.Session, cfg Pipel
 // getVoiceID returns the ElevenLabs voice ID for a voice name
 func getVoiceID(name string) string {
 	voices := map[string]string{
-		"Rachel":  "21m00Tcm4TlvDq8ikWAM",
-		"Domi":    "AZnzlk1XvdvUeBnXmlld",
-		"Bella":   "EXAVITQu4vr4xnSDxMaL",
-		"Antoni":  "ErXwobaYiN019PkySvjV",
-		"Elli":    "MF3mGyEYCl7XYWbV9V6O",
-		"Josh":    "TxGEqnHWrfWFTfGW9XjX",
-		"Arnold":  "VR6AewLTigWG4xSOukaG",
-		"Adam":    "pNInz6obpgDQGcFmaJgB",
-		"Sam":     "yoZ06aMxZJJ28mfd3POQ",
+		"Rachel": "21m00Tcm4TlvDq8ikWAM",
+		"Domi":   "AZnzlk1XvdvUeBnXmlld",
+		"Bella":  "EXAVITQu4vr4xnSDxMaL",
+		"Antoni": "ErXwobaYiN019PkySvjV",
+		"Elli":   "MF3mGyEYCl7XYWbV9V6O",
+		"Josh":   "TxGEqnHWrfWFTfGW9XjX",
+		"Arnold": "VR6AewLTigWG4xSOukaG",
+		"Adam":   "pNInz6obpgDQGcFmaJgB",
+		"Sam":    "yoZ06aMxZJJ28mfd3POQ",
 	}
 
 	if id, ok := voices[name]; ok {

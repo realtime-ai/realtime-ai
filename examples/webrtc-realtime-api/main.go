@@ -36,7 +36,7 @@ func main() {
 	// Create server configuration
 	config := server.DefaultWebRTCRealtimeConfig()
 	config.RTCUDPPort = 9000
-	config.ICELite = true
+	config.ICELite = false
 	config.DefaultModel = "gemini-2.0-flash"
 
 	// Create server
@@ -57,10 +57,10 @@ func main() {
 	http.Handle("/", http.FileServer(http.Dir("examples/webrtc-realtime-api")))
 
 	log.Println("WebRTC Realtime API server started")
-log.Println("Open http://localhost:8081 in your browser")
+	log.Println("Open http://localhost:8081 in your browser")
 	log.Println("UDP port: 9000")
 
-if err := http.ListenAndServe(":8081", nil); err != nil {
+	if err := http.ListenAndServe(":8081", nil); err != nil {
 		log.Fatalf("Failed to start HTTP server: %v", err)
 	}
 }
