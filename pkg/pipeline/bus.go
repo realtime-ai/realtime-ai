@@ -11,14 +11,14 @@ import (
 type EventType string
 
 const (
-	EventError         EventType = "Error"
-	EventWarning       EventType = "Warning"
-	EventPartialResult EventType = "PartialResult"
-	EventFinalResult   EventType = "FinalResult"
-	EventBargeIn       EventType = "BargeIn"
-	EventInterrupted   EventType = "Interrupted"
-	EventStarted       EventType = "Started"
-	EventStopped       EventType = "Stopped"
+	EventError          EventType = "Error"
+	EventWarning        EventType = "Warning"
+	EventPartialResult  EventType = "PartialResult"
+	EventFinalResult    EventType = "FinalResult"
+	EventBargeIn        EventType = "BargeIn"
+	EventInterrupted    EventType = "Interrupted"
+	EventStarted        EventType = "Started"
+	EventStopped        EventType = "Stopped"
 	EventVADSpeechStart EventType = "VADSpeechStart"
 	EventVADSpeechEnd   EventType = "VADSpeechEnd"
 

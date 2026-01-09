@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"reflect"
 	"sync"
 	"time"
 
-	openairt "github.com/WqyJh/go-openai-realtime"
+	openairt "github.com/WqyJh/go-openai-realtime/v2"
 	"github.com/realtime-ai/realtime-ai/pkg/audio"
 	"github.com/realtime-ai/realtime-ai/pkg/pipeline"
-	"github.com/sashabaranov/go-openai"
 )
 
 // Make sure OpenAIRealtimeAPIElement implements pipeline.Element
@@ -21,6 +21,10 @@ var _ pipeline.Element = (*OpenAIRealtimeAPIElement)(nil)
 
 type OpenAIRealtimeAPIElement struct {
 	*pipeline.BaseElement
+
+	model      string
+	disableVad bool
+	prompt     string
 
 	conn      *openairt.Conn
 	sessionID string
@@ -44,10 +48,24 @@ func NewOpenAIRealtimeAPIElement() *OpenAIRealtimeAPIElement {
 		}
 	}
 
-	return &OpenAIRealtimeAPIElement{
+	elem := &OpenAIRealtimeAPIElement{
 		BaseElement: pipeline.NewBaseElement("openai-realtime-element", 100),
 		dumper:      dumper,
+		model:       "gpt-realtime",
 	}
+	elem.registerProperties()
+	return elem
+}
+
+func (e *OpenAIRealtimeAPIElement) registerProperties() {
+	e.RegisterProperty(pipeline.PropertyDesc{
+		Name:     "prompt",
+		Type:     reflect.TypeOf(""),
+		Writable: true,
+		Readable: true,
+		Default:  e.prompt,
+	})
+	// 绑定其他变量
 }
 
 func (e *OpenAIRealtimeAPIElement) Start(ctx context.Context) error {
@@ -59,18 +77,36 @@ func (e *OpenAIRealtimeAPIElement) Start(ctx context.Context) error {
 	// if baseURL != "" {
 	// 	client.BaseURL = baseURL
 	// }
-	conn, err := client.Connect(context.Background())
+	conn, err := client.Connect(context.Background(), openairt.WithModel(e.model))
 	if err != nil {
+		log.Printf("Failed to connect to OpenAI: %v", err)
 		return err
 	}
 	e.conn = conn
+	log.Println("openai connect success")
 
 	responseDeltaHandler := func(ctx context.Context, event openairt.ServerEvent) {
 		switch event.ServerEventType() {
-		case openairt.ServerEventTypeResponseAudioTranscriptDelta:
+		case openairt.ServerEventTypeResponseOutputAudioTranscriptDelta:
+			rsp := event.(openairt.ResponseOutputAudioTranscriptDeltaEvent)
+			payload := &pipeline.TextDeltaPayload{
+				Text: rsp.Delta,
+			}
+			e.Bus().Publish(pipeline.Event{
+				Type:      pipeline.EventTextDelta,
+				Timestamp: time.Now(),
+				Payload:   payload,
+			})
 			// ignore
-		case openairt.ServerEventTypeResponseAudioTranscriptDone:
-			fmt.Printf("[response] %s\n", event.(openairt.ResponseAudioTranscriptDoneEvent).Transcript)
+		case openairt.ServerEventTypeResponseOutputAudioTranscriptDone:
+			log.Printf("[response] %s\n", event.(openairt.ResponseOutputAudioTranscriptDoneEvent).Transcript)
+			e.Bus().Publish(pipeline.Event{
+				Type:      pipeline.EventTextDelta,
+				Timestamp: time.Now(),
+				Payload: &pipeline.TextDeltaPayload{
+					IsFinal: true,
+				},
+			})
 		}
 	}
 
@@ -96,21 +132,26 @@ func (e *OpenAIRealtimeAPIElement) Start(ctx context.Context) error {
 				log.Fatal(err)
 			}
 			fmt.Printf("[%s] %s\n", event.ServerEventType(), string(data))
+		default:
+			// data, err := json.Marshal(event)
+			// if err != nil {
+			// 	log.Fatal(err)
+			// }
+			// if len(data) > 200 {
+			// 	data = data[:200]
+			// }
+			// fmt.Printf("[%s] %s\n", event.ServerEventType(), string(data))
 		}
 	}
 
-	audiobuffer := make([]byte, 0)
-
 	audioResponseHandler := func(ctx context.Context, event openairt.ServerEvent) {
 		switch event.ServerEventType() {
-		case openairt.ServerEventTypeResponseAudioDelta:
-			msg := event.(openairt.ResponseAudioDeltaEvent)
-			// log.Printf("audioResponseHandler: %v", delta)
+		case openairt.ServerEventTypeResponseOutputAudioDelta:
+			msg := event.(openairt.ResponseOutputAudioDeltaEvent)
 			data, err := base64.StdEncoding.DecodeString(msg.Delta)
 			if err != nil {
 				log.Fatal(err)
 			}
-			audiobuffer = append(audiobuffer, data...)
 
 			// dump 音频数据
 			if e.dumper != nil {
@@ -118,11 +159,6 @@ func (e *OpenAIRealtimeAPIElement) Start(ctx context.Context) error {
 					log.Printf("Failed to dump OpenAI audio: %v", err)
 				}
 			}
-
-		case openairt.ServerEventTypeResponseAudioDone:
-
-			data := audiobuffer[:]
-			audiobuffer = make([]byte, 0)
 
 			e.BaseElement.OutChan <- &pipeline.PipelineMessage{
 				Type:      pipeline.MsgTypeAudio,
@@ -137,41 +173,75 @@ func (e *OpenAIRealtimeAPIElement) Start(ctx context.Context) error {
 				},
 			}
 
+		case openairt.ServerEventTypeResponseOutputAudioDone:
+			log.Printf("[OpenAI] 收到 OpenAI 音频结束")
+
 		case openairt.ServerEventTypeInputAudioBufferSpeechStarted:
 			// Interrupt the current response
-			msg := event.(openairt.InputAudioBufferSpeechStartedEvent)
-			log.Println("AI session interrupted")
-			e.Bus().Publish(pipeline.Event{
-				Type:      pipeline.EventInterrupted,
-				Timestamp: time.Now(),
-				Payload:   msg,
-			})
+			log.Println("[OpenAI] Input audio buffer speech started")
+			// msg := event.(openairt.InputAudioBufferSpeechStartedEvent)
+			// e.Bus().Publish(pipeline.Event{
+			// 	Type:      pipeline.EventInterrupted,
+			// 	Timestamp: time.Now(),
+			// 	Payload:   msg,
+			// })
 		case openairt.ServerEventTypeInputAudioBufferSpeechStopped:
-			log.Println("Input audio buffer speech stopped")
+			log.Println("[OpenAI] Input audio buffer speech stopped")
 		}
 	}
 
 	connHandler := openairt.NewConnHandler(ctx, conn, logHandler, responseHandler, responseDeltaHandler, audioResponseHandler)
 	connHandler.Start()
 
-	conn.SendMessage(ctx, openairt.SessionUpdateEvent{
-		Session: openairt.ClientSession{
-			Modalities:        []openairt.Modality{openairt.ModalityText, openairt.ModalityAudio},
-			Voice:             openairt.VoiceShimmer,
-			OutputAudioFormat: openairt.AudioFormatPcm16,
-			InputAudioTranscription: &openairt.InputAudioTranscription{
-				Model: openai.Whisper1,
-			},
-			TurnDetection: &openairt.ClientTurnDetection{
-				Type: openairt.ClientTurnDetectionTypeServerVad,
-				TurnDetectionParams: openairt.TurnDetectionParams{
-					Threshold:         0.7,
-					SilenceDurationMs: 800,
+	updateEvent := openairt.SessionUpdateEvent{
+		Session: openairt.SessionUnion{
+			Realtime: &openairt.RealtimeSession{
+				Model:            e.model,
+				OutputModalities: []openairt.Modality{openairt.ModalityAudio},
+				Audio: &openairt.RealtimeSessionAudio{
+					Input: &openairt.SessionAudioInput{
+						Format: &openairt.AudioFormatUnion{
+							PCM: &openairt.AudioFormatPCM{
+								Rate: 24000,
+							},
+						},
+						Transcription: &openairt.AudioTranscription{
+							Language: "en",
+							Model:    "gpt-4o-mini-transcribe",
+						},
+					},
+					Output: &openairt.SessionAudioOutput{
+						Format: &openairt.AudioFormatUnion{
+							PCM: &openairt.AudioFormatPCM{
+								Rate: 24000,
+							},
+						},
+						Voice: openairt.VoiceShimmer,
+					},
 				},
+				MaxOutputTokens: 4000,
+				Instructions:    "You are a helpful, witty, and friendly AI. Your voice and personality should be warm and engaging, with a lively and playful tone. If interacting in a non-English language, start by using the user's language to response.",
 			},
-			MaxOutputTokens: 4000,
 		},
-	})
+	}
+
+	if !e.disableVad {
+		updateEvent.Session.Realtime.Audio.Input.TurnDetection = &openairt.TurnDetectionUnion{
+			ServerVad: &openairt.ServerVad{
+				Threshold:         0.8,
+				SilenceDurationMs: 200,
+			},
+		}
+		updateEvent.Session.Realtime.Audio.Input.NoiseReduction = &openairt.AudioNoiseReduction{
+			Type: "near_field", // 耳机模式：near_field，远场模式：far_field
+		}
+	}
+
+	if e.prompt != "" {
+		updateEvent.Session.Realtime.Instructions = e.prompt
+	}
+
+	conn.SendMessage(ctx, updateEvent)
 
 	e.wg.Add(1)
 	go func() {
@@ -210,7 +280,7 @@ func (e *OpenAIRealtimeAPIElement) Start(ctx context.Context) error {
 						log.Println("AI session send error:", err)
 						continue
 					}
-
+					// 发送消息给 OpenAI
 					if err := e.conn.SendMessage(ctx, clientEvent); err != nil {
 						log.Println("AI session send error:", err)
 						continue
@@ -286,4 +356,20 @@ func unmarshalClientEvent[T openairt.ClientEvent](data []byte) (T, error) {
 		return t, err
 	}
 	return t, nil
+}
+
+// SetProperty sets a property value at runtime.
+func (e *OpenAIRealtimeAPIElement) SetProperty(name string, value interface{}) error {
+	switch name {
+	case "prompt":
+		if prompt, ok := value.(string); ok {
+			e.prompt = prompt
+		}
+	case "model":
+		if model, ok := value.(string); ok {
+			e.model = model
+		}
+	}
+
+	return e.BaseElement.SetProperty(name, value)
 }

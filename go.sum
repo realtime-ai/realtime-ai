@@ -6,6 +6,10 @@ github.com/Microsoft/cognitive-services-speech-sdk-go v1.33.0 h1:xPYSgs3nGr5J9uc
 github.com/Microsoft/cognitive-services-speech-sdk-go v1.33.0/go.mod h1:ct4bG95K1Lu/c5y60PVGI1XOjo9aAcl80DD5dvu6zsg=
 github.com/WqyJh/go-openai-realtime v0.3.4 h1:VKTvilING9+F5nSgJ71lKENvn0QfBhr7OBZqBtDR5DU=
 github.com/WqyJh/go-openai-realtime v0.3.4/go.mod h1:nmUYODacQuObuh0DFSEIDfJM9L4ZFDRU/OEGYMryt60=
+github.com/WqyJh/go-openai-realtime v0.6.1 h1:QhWRrbx9ZeixN/kVH/5VyEgjoMei7xisHqw7ybbef2E=
+github.com/WqyJh/go-openai-realtime v0.6.1/go.mod h1:BCN7J7AUbfSFkLLVnhGWF2OkvoQ7GqTWrU/w+d+QwR4=
+github.com/WqyJh/go-openai-realtime/v2 v2.0.0-rc h1:nOCfDNfbqUODJl+uGI/sl92tSiJv5rzx4uxZhqwgX7c=
+github.com/WqyJh/go-openai-realtime/v2 v2.0.0-rc/go.mod h1:XdhntAObZhUOGQTV7JZEvRkt2T+VwyvSnYIDNigGsDs=
 github.com/asticode/go-astiav v0.30.0 h1:GknLdn79ZuVrhvsrMfPP0t1x3EpQcwq/lL9+a2Wj/64=
 github.com/asticode/go-astiav v0.30.0/go.mod h1:K7D8UC6GeQt85FUxk2KVwYxHnotrxuEnp5evkkudc2s=
 github.com/asticode/go-astikit v0.42.0 h1:pnir/2KLUSr0527Tv908iAH6EGYYrYta132vvjXsH5w=
@@ -14,6 +18,8 @@ github.com/cenkalti/backoff/v4 v4.2.1 h1:y4OZtCnogmCPw98Zjyt5a6+QwPLGkiQsYW5oUqy
 github.com/cenkalti/backoff/v4 v4.2.1/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
 github.com/coder/websocket v1.8.12 h1:5bUXkEPPIbewrnkU8LTCLVaxi4N4J8ahufH2vlo4NAo=
 github.com/coder/websocket v1.8.12/go.mod h1:LNVeNrXQZfe5qhS9ALED3uA+l5pPqvwXg3CKoDBB2gs=
+github.com/coder/websocket v1.8.14 h1:9L0p0iKiNOibykf283eHkKUHHrpG7f65OE3BhhO7v9g=
+github.com/coder/websocket v1.8.14/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

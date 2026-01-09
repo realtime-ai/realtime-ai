@@ -240,7 +240,7 @@ func (e *AudioPacerSinkElement) listenEvent(ctx context.Context) {
 
 // handleInterrupt 处理打断事件
 func (e *AudioPacerSinkElement) handleInterrupt(event pipeline.Event) {
-	log.Printf("[AudioPacerSink] Received interrupt event, clearing buffer with %dms fade-out", e.fadeOutMs)
+	log.Printf("[AudioPacerSink] Received interrupt event %v, clearing buffer with %dms fade-out", event.Payload, e.fadeOutMs)
 
 	// 清空音频缓冲区（带淡出效果）
 	if e.fadeOutMs > 0 {
@@ -254,9 +254,9 @@ func (e *AudioPacerSinkElement) handleInterrupt(event pipeline.Event) {
 		Type:      pipeline.EventInterruptAcknowledged,
 		Timestamp: time.Now(),
 		Payload: map[string]interface{}{
-			"source":     e.GetName(),
-			"fadeOutMs":  e.fadeOutMs,
-			"clearedAt":  time.Now().UnixMilli(),
+			"source":    e.GetName(),
+			"fadeOutMs": e.fadeOutMs,
+			"clearedAt": time.Now().UnixMilli(),
 		},
 	})
 

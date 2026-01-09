@@ -4,7 +4,7 @@ go 1.23.4
 
 require (
 	github.com/Microsoft/cognitive-services-speech-sdk-go v1.33.0
-	github.com/WqyJh/go-openai-realtime v0.3.4
+	github.com/WqyJh/go-openai-realtime v0.6.1
 	github.com/asticode/go-astiav v0.30.0
 	github.com/gen2brain/malgo v0.11.23
 	github.com/google/uuid v1.6.0
@@ -30,9 +30,10 @@ require (
 require (
 	cloud.google.com/go v0.116.0 // indirect
 	cloud.google.com/go/compute/metadata v0.5.0 // indirect
+	github.com/WqyJh/go-openai-realtime/v2 v2.0.0-rc // indirect
 	github.com/asticode/go-astikit v0.42.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
-	github.com/coder/websocket v1.8.12 // indirect
+	github.com/coder/websocket v1.8.14 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect

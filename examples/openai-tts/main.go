@@ -23,17 +23,19 @@ func main() {
 		log.Fatal("OPENAI_API_KEY environment variable is not set")
 	}
 
-	// Create OpenAI TTS provider
-	// Use NewOpenAITTSProvider for standard quality
-	// Use NewOpenAITTSProviderHD for high definition quality
+	// Create OpenAI TTS provider (gpt-4o-mini-tts model)
 	provider := tts.NewOpenAITTSProvider(apiKey)
+
+	// Set voice instructions for controlling tone/style
+	provider.SetInstructions("Speak in a friendly and engaging tone")
 
 	// Create TTS element with the provider
 	ttsElement := elements.NewUniversalTTSElement(provider)
 
-	// Configure voice (optional)
-	// Available voices: alloy, echo, fable, onyx, nova, shimmer
-	ttsElement.SetVoice("nova")
+	// Configure voice
+	// Available voices: alloy, ash, ballad, coral, echo, fable, nova, onyx, sage, shimmer, verse, marin, cedar
+	// Recommended: marin, cedar (highest quality)
+	ttsElement.SetVoice("coral")
 
 	// Set language (optional)
 	ttsElement.SetLanguage("en-US")
@@ -56,9 +58,9 @@ func main() {
 
 	// Example: Synthesize some text
 	texts := []string{
-		"Hello! This is a test of OpenAI's text to speech API.",
-		"I'm using the Nova voice, which sounds energetic and lively.",
-		"The universal TTS element makes it easy to switch between different providers.",
+		"Hello! This is a test of OpenAI's gpt-4o-mini-tts model.",
+		"I'm using the Coral voice, which sounds natural and conversational.",
+		"The voice instructions help control the tone and style of speech.",
 	}
 
 	for i, text := range texts {
@@ -80,7 +82,7 @@ func main() {
 		select {
 		case audioMsg := <-ttsElement.Out():
 			if audioMsg.AudioData != nil {
-				fmt.Printf("✓ Received audio: %d bytes, %d Hz, %d channels\n",
+				fmt.Printf("Received audio: %d bytes, %d Hz, %d channels\n",
 					len(audioMsg.AudioData.Data),
 					audioMsg.AudioData.SampleRate,
 					audioMsg.AudioData.Channels)
@@ -95,7 +97,7 @@ func main() {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	fmt.Println("\n✓ Demo completed successfully!")
+	fmt.Println("\nDemo completed successfully!")
 
 	// Example: List supported voices
 	fmt.Println("\nSupported voices:")

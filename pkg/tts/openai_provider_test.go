@@ -19,7 +19,10 @@ func TestOpenAITTSProvider_GetSupportedVoices(t *testing.T) {
 	provider := NewOpenAITTSProvider("test-key")
 	voices := provider.GetSupportedVoices()
 
-	expectedVoices := []string{"alloy", "echo", "fable", "onyx", "nova", "shimmer"}
+	expectedVoices := []string{
+		"alloy", "ash", "ballad", "coral", "echo", "fable",
+		"nova", "onyx", "sage", "shimmer", "verse", "marin", "cedar",
+	}
 	if len(voices) != len(expectedVoices) {
 		t.Errorf("Expected %d voices, got %d", len(expectedVoices), len(voices))
 	}
@@ -41,8 +44,8 @@ func TestOpenAITTSProvider_GetDefaultVoice(t *testing.T) {
 	provider := NewOpenAITTSProvider("test-key")
 	defaultVoice := provider.GetDefaultVoice()
 
-	if defaultVoice != "alloy" {
-		t.Errorf("Expected default voice 'alloy', got '%s'", defaultVoice)
+	if defaultVoice != "coral" {
+		t.Errorf("Expected default voice 'coral', got '%s'", defaultVoice)
 	}
 }
 
@@ -91,16 +94,31 @@ func TestOpenAITTSProvider_ValidateConfig(t *testing.T) {
 func TestOpenAITTSProvider_SetModel(t *testing.T) {
 	provider := NewOpenAITTSProvider("test-key")
 
-	// Test setting to HD model
-	provider.SetModel("tts-1-hd")
-	if provider.model != "tts-1-hd" {
-		t.Errorf("Expected model 'tts-1-hd', got '%s'", provider.model)
+	// Default model should be gpt-4o-mini-tts
+	if provider.model != "gpt-4o-mini-tts" {
+		t.Errorf("Expected default model 'gpt-4o-mini-tts', got '%s'", provider.model)
 	}
 
-	// Test setting back to standard model
-	provider.SetModel("tts-1")
-	if provider.model != "tts-1" {
-		t.Errorf("Expected model 'tts-1', got '%s'", provider.model)
+	// Test setting to latest snapshot
+	provider.SetModel("gpt-4o-mini-tts-2025-12-15")
+	if provider.model != "gpt-4o-mini-tts-2025-12-15" {
+		t.Errorf("Expected model 'gpt-4o-mini-tts-2025-12-15', got '%s'", provider.model)
+	}
+}
+
+func TestOpenAITTSProvider_Instructions(t *testing.T) {
+	provider := NewOpenAITTSProvider("test-key")
+
+	// Default instructions should be empty
+	if provider.GetInstructions() != "" {
+		t.Errorf("Expected empty default instructions, got '%s'", provider.GetInstructions())
+	}
+
+	// Test setting instructions
+	testInstructions := "Speak in a cheerful and positive tone"
+	provider.SetInstructions(testInstructions)
+	if provider.GetInstructions() != testInstructions {
+		t.Errorf("Expected instructions '%s', got '%s'", testInstructions, provider.GetInstructions())
 	}
 }
 
@@ -140,6 +158,13 @@ func TestOpenAITTSProvider_GetAudioFormat(t *testing.T) {
 	}
 }
 
+func TestOpenAITTSProvider_ImplementsStreamingInterface(t *testing.T) {
+	provider := NewOpenAITTSProvider("test-key")
+
+	// Verify provider implements StreamingTTSProvider
+	var _ StreamingTTSProvider = provider
+}
+
 // Integration test - only runs if OPENAI_API_KEY is set
 func TestOpenAITTSProvider_Synthesize_Integration(t *testing.T) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
@@ -154,36 +179,36 @@ func TestOpenAITTSProvider_Synthesize_Integration(t *testing.T) {
 		request *SynthesizeRequest
 	}{
 		{
-			name: "Basic synthesis",
+			name: "Basic synthesis with coral voice",
 			request: &SynthesizeRequest{
 				Text:  "Hello, this is a test.",
-				Voice: "alloy",
+				Voice: "coral",
 			},
 		},
 		{
-			name: "With custom voice",
+			name: "With marin voice (recommended)",
 			request: &SynthesizeRequest{
-				Text:  "Testing with Nova voice.",
-				Voice: "nova",
+				Text:  "Testing with marin voice.",
+				Voice: "marin",
 			},
 		},
 		{
 			name: "With speed option",
 			request: &SynthesizeRequest{
 				Text:  "Testing with speed control.",
-				Voice: "alloy",
+				Voice: "coral",
 				Options: map[string]interface{}{
 					"speed": 1.5,
 				},
 			},
 		},
 		{
-			name: "With opus format",
+			name: "With instructions",
 			request: &SynthesizeRequest{
-				Text:  "Testing opus format.",
-				Voice: "alloy",
+				Text:  "I am so excited to tell you this news!",
+				Voice: "coral",
 				Options: map[string]interface{}{
-					"format": "opus",
+					"instructions": "Speak in a cheerful and enthusiastic tone",
 				},
 			},
 		},
@@ -216,10 +241,52 @@ func TestOpenAITTSProvider_Synthesize_Integration(t *testing.T) {
 	}
 }
 
-func TestNewOpenAITTSProviderHD(t *testing.T) {
-	provider := NewOpenAITTSProviderHD("test-key")
+// Integration test for streaming - only runs if OPENAI_API_KEY is set
+func TestOpenAITTSProvider_StreamSynthesize_Integration(t *testing.T) {
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		t.Skip("Skipping integration test: OPENAI_API_KEY not set")
+	}
 
-	if provider.model != "tts-1-hd" {
-		t.Errorf("Expected HD provider to use 'tts-1-hd', got '%s'", provider.model)
+	provider := NewOpenAITTSProvider(apiKey)
+	provider.SetInstructions("Speak calmly and clearly")
+
+	ctx := context.Background()
+	req := &SynthesizeRequest{
+		Text:  "This is a streaming test. The audio should arrive in chunks.",
+		Voice: "coral",
+	}
+
+	audioChan, errChan := provider.StreamSynthesize(ctx, req)
+
+	var totalBytes int
+	var chunkCount int
+
+	for {
+		select {
+		case chunk, ok := <-audioChan:
+			if !ok {
+				// Channel closed, check for errors
+				select {
+				case err := <-errChan:
+					if err != nil {
+						t.Fatalf("StreamSynthesize error: %v", err)
+					}
+				default:
+				}
+				t.Logf("Stream completed: %d chunks, %d total bytes", chunkCount, totalBytes)
+				if totalBytes == 0 {
+					t.Error("Expected audio data, got empty")
+				}
+				return
+			}
+			totalBytes += len(chunk)
+			chunkCount++
+
+		case err := <-errChan:
+			if err != nil {
+				t.Fatalf("StreamSynthesize error: %v", err)
+			}
+		}
 	}
 }
