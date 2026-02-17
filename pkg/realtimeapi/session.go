@@ -57,6 +57,9 @@ type Session struct {
 
 	// Callbacks
 	onClose func(session *Session)
+
+	// ResponseManager manages the complete response lifecycle
+	responseManager *ResponseManager
 }
 
 // SessionConfig holds the configuration for creating a new session.
@@ -388,6 +391,13 @@ func (s *Session) GetAudioTransport() AudioTransport {
 	return nil
 }
 
+// GetResponseManager returns the response manager for this session.
+func (s *Session) GetResponseManager() *ResponseManager {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.responseManager
+}
+
 // PushAudio pushes PCM audio data directly to the pipeline.
 // This is used for WebRTC mode where audio comes via RTP, not base64-encoded events.
 func (s *Session) PushAudio(data []byte, sampleRate, channels int) {
@@ -678,47 +688,82 @@ func (s *Session) handleConversationItemDelete(e *events.ConversationItemDeleteE
 	})
 }
 
-func (s *Session) handleResponseCreate(_ *events.ResponseCreateEvent) error {
-	// Create a new response
-	responseID := "resp_" + uuid.New().String()[:8]
+func (s *Session) handleResponseCreate(e *events.ResponseCreateEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	response := events.Response{
-		ID:     responseID,
-		Object: "realtime.response",
-		Status: events.ResponseStatusInProgress,
-		Output: []events.ConversationItem{},
+	// 创建 ResponseManager（如果不存在）
+	if s.responseManager == nil {
+		s.responseManager = NewResponseManager(s)
 	}
 
-	// Send response.created event
-	if err := s.SendEvent(events.NewResponseCreatedEvent(response)); err != nil {
-		return err
+	// 获取响应配置
+	config := events.ResponseConfig{}
+	if e.Response != nil {
+		config = *e.Response
 	}
 
-	// Trigger AI processing through the pipeline
-	// This will be handled by the event handler that listens to pipeline output
-	if p := s.GetPipeline(); p != nil {
-		// The pipeline will process and send response events
-		// through the session's event handler
+	// 使用默认配置填充缺失值
+	if len(config.Modalities) == 0 {
+		config.Modalities = s.Config.Modalities
+	}
+	if config.Voice == "" {
+		config.Voice = s.Config.Voice
+	}
+	if config.Instructions == "" {
+		config.Instructions = s.Config.Instructions
+	}
+	if config.OutputAudioFormat == "" {
+		config.OutputAudioFormat = s.Config.OutputAudioFormat
+	}
+	if config.Temperature == 0 {
+		config.Temperature = s.Config.Temperature
+	}
+	if config.MaxOutputTokens == 0 {
+		config.MaxOutputTokens = s.Config.MaxOutputTokens
+	}
+
+	// 创建响应
+	if err := s.responseManager.CreateResponse(config); err != nil {
+		return s.SendEvent(events.NewErrorEvent(
+			events.ErrorTypeInvalidRequest,
+			"response_create_failed",
+			err.Error(),
+			"",
+		))
+	}
+
+	// 启动 Pipeline 响应处理器
+	if p := s.Pipeline; p != nil {
+		handler := NewPipelineResponseHandler(s, s.responseManager)
+		handler.Start(p)
 	}
 
 	return nil
 }
 
 func (s *Session) handleResponseCancel(e *events.ResponseCancelEvent) error {
-	// Cancel/interrupt the current response generation
-	// This handles both response.cancel and response.interrupt events
-	// (ResponseInterruptEvent is an alias for ResponseCancelEvent)
-
-	p := s.GetPipeline()
-	if p == nil {
-		// No pipeline, just acknowledge - nothing to cancel
-		return nil
-	}
-
 	// Determine the reason for cancellation
 	reason := e.Reason
 	if reason == "" {
 		reason = "client_request"
+	}
+
+	// First, try to interrupt via ResponseManager if active
+	s.mu.RLock()
+	rm := s.responseManager
+	s.mu.RUnlock()
+
+	if rm != nil && rm.GetState() == ResponseStateInProgress {
+		log.Printf("[session %s] Interrupting response via ResponseManager, reason: %s", s.ID, reason)
+		return rm.Interrupt(reason)
+	}
+
+	// Fallback to pipeline interrupt manager
+	p := s.GetPipeline()
+	if p == nil {
+		// No pipeline, just acknowledge - nothing to cancel
+		return nil
 	}
 
 	// Get the interrupt manager from the pipeline
